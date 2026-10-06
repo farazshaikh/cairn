@@ -1,15 +1,22 @@
 //! Page file, buffer pool and B-tree storage for cairn.
 //!
-//! A database is one file of fixed 4096-byte pages. Page 0 is the header
-//! (see [`header`](crate#header-page)); every other page is a B-tree node or
-//! a free page. All on-disk integers are little-endian, and every layout is
-//! documented next to the code that encodes it. Decoding never panics:
-//! malformed bytes surface as [`StorageError`].
+//! A database is one file of fixed 4096-byte pages. Page 0 is the header;
+//! every other page is a B-tree node or a free page. All on-disk integers are
+//! little-endian and written field by field (no `unsafe`, no serialization
+//! crates). Decoding never panics: malformed bytes surface as
+//! [`StorageError`], with `Corrupt { page, .. }` naming the bad page.
 //!
-//! # Header page
+//! Each byte layout is documented as an offset table at the top of the module
+//! that encodes it, and the repository README collects them:
 //!
-//! The byte layout of page 0 is documented in the `header` module source and
-//! summarised in the repository README.
+//! - `header.rs`: page 0 (magic `cairn\0`, version, page count, free list
+//!   head and length, 16 named root slots);
+//! - `pager.rs`: free pages, which form a LIFO list through their own bytes;
+//! - `node.rs`: B-tree leaf and internal nodes, size limits and fill bounds.
+//!
+//! [`Pager`] owns the file, the header and a bounded LRU buffer pool.
+//! [`BTree`] is a handle to a tree rooted at a page; its methods borrow the
+//! pager.
 
 #![cfg_attr(
     not(test),
