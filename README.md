@@ -17,8 +17,9 @@ runs SQL interactively or from a script.
 | `crates/cli` | The `cairn` interactive shell |
 
 Status: `crates/storage` provides the pager, buffer pool and B-tree (see
-[Storage](#storage)); its write-ahead log and the other crates are scaffolds,
-each delivered by a later milestone.
+[Storage](#storage)) and `crates/sql` the tokenizer and parser (see
+[SQL](#sql)). The write-ahead log, `crates/exec` and `crates/cli` are
+scaffolds, each delivered by a later milestone.
 
 ## Storage
 
@@ -134,6 +135,125 @@ Dropping a `Pager` syncs on a best-effort basis and ignores errors, so call
 Not yet provided: a write-ahead log or crash atomicity (a crash before `sync`
 can leave a file that `open` rejects), file locking or concurrent access,
 overflow pages for larger keys or values, and page checksums.
+
+## SQL
+
+`cairn-sql` turns SQL text into a typed syntax tree. It does not check
+names, types or meaning; that is the job of `crates/exec`.
+
+```rust
+use cairn_sql::{parse, parse_expr, tokenize};
+
+let statements = parse("SELECT a FROM t WHERE a > 1; DELETE FROM t")?;  // Vec<Statement>
+let canonical = statements[0].to_string();      // "SELECT a FROM t WHERE a > 1"
+let expr = parse_expr("1 + 2 * 3")?;            // one expression
+let shape = expr.fully_parenthesized().to_string();  // "(1 + (2 * 3))"
+let tokens = tokenize("a <> 'x'")?;             // Vec<Token>, always ending with Eof
+```
+
+Every token and syntax node carries a `Span`: byte offsets `start` and `end`
+(exclusive), and the 1-based `line` and `column` of `start`. Columns count
+characters, and only `\n` starts a line. Syntax nodes are `Spanned<T>`, whose
+equality ignores spans, so the same SQL with different spacing parses to equal
+trees.
+
+Errors are `SqlError { message, span, source_line }`. Parse errors name what
+was expected and what was found, and `Display` shows the line with a caret:
+
+```text
+line 3, column 6: expected expression, found end of input
+WHERE
+     ^
+```
+
+### Lexical rules
+
+- Keywords are case-insensitive. Unquoted identifiers are ASCII letters,
+  digits and `_`, not starting with a digit, and are lowercased. Double-quoted
+  identifiers keep their case and may contain any character; `""` is a quote.
+- Reserved words cannot be unquoted identifiers: `AND AS ASC BEGIN BETWEEN BY
+  CASE COMMIT CREATE DELETE DESC DISTINCT DROP ELSE END EXISTS FALSE FROM GROUP
+  HAVING IF IN INDEX INNER INSERT INTO IS JOIN KEY LEFT LIKE LIMIT NOT NULL
+  OFFSET ON OR ORDER PRIMARY ROLLBACK SELECT SET TABLE THEN TRUE UNIQUE UPDATE
+  VALUES WHEN WHERE`. Type names and function names (`text`, `count`) are not
+  reserved.
+- Integers are digits and must fit `i64`. Reals have a decimal point or an
+  exponent (`1.5`, `.5`, `1.`, `1e3`, `2.5E-2`) and must be finite `f64`
+  values. Numbers have no sign: `-1` is unary minus applied to `1`, so the
+  smallest `i64` is written `-9223372036854775807 - 1`.
+- Strings use single quotes, with `''` for a quote, and may span lines.
+  `NULL`, `TRUE` and `FALSE` are literals.
+- Comments: `-- to end of line` and `/* block */` (not nested).
+- Operators: `= <> != < <= > >= + - * / % || ( ) , . ;` (`!=` is `<>`).
+- Errors: an unterminated string, quoted identifier or block comment, an
+  unknown character, an out-of-range number, or a letter right after a number.
+
+### Statements
+
+Statements are separated by `;`; one trailing `;` is allowed, and empty input
+or an empty statement (`;;`) is an error. Square brackets mark optional parts.
+
+```text
+CREATE TABLE [IF NOT EXISTS] t (col type [constraint]..., ...)
+    type:       INTEGER | REAL | TEXT | BOOLEAN
+    constraint: PRIMARY KEY | NOT NULL | UNIQUE   (any order, each at most once)
+DROP TABLE [IF EXISTS] t
+CREATE [UNIQUE] INDEX i ON t (col)
+INSERT INTO t [(col, ...)] VALUES (expr, ...), ...
+UPDATE t SET col = expr, ... [WHERE expr]
+DELETE FROM t [WHERE expr]
+BEGIN | COMMIT | ROLLBACK
+
+SELECT [DISTINCT] item, ...
+    [FROM t [AS a] [[INNER | LEFT] JOIN u [AS b] ON expr]...]
+    [WHERE expr] [GROUP BY expr, ...] [HAVING expr]
+    [ORDER BY expr [ASC | DESC], ...] [LIMIT integer [OFFSET integer]]
+    item: * | t.* | expr [AS alias]
+```
+
+Clauses must appear in this order. `SELECT` without `FROM` is allowed. Aliases
+need `AS`, and `LIMIT` and `OFFSET` take integer literals.
+
+### Expressions
+
+Operators from lowest to highest precedence; binary operators are
+left-associative (`a - b - c` is `(a - b) - c`):
+
+| Level | Operators |
+|-------|-----------|
+| 1 | `OR` |
+| 2 | `AND` |
+| 3 | `NOT` (prefix) |
+| 4 | `= <> != < <= > >=` |
+| 5 | `IS [NOT] NULL`, `[NOT] BETWEEN x AND y`, `[NOT] IN (expr, ...)`, `[NOT] LIKE pattern` |
+| 6 | `\|\|` |
+| 7 | `+ -` |
+| 8 | `* / %` |
+| 9 | `-` (prefix) |
+
+Operands are literals, columns (`col` or `t.col`), parenthesised expressions,
+`CASE WHEN cond THEN result ... [ELSE result] END`, and calls `name()`,
+`name(expr, ...)`, `name(*)` and `name(DISTINCT expr, ...)`, such as
+`COUNT(*)` and `COUNT(DISTINCT x)`. `BETWEEN` bounds and `LIKE` patterns bind
+at the `||` level, so `x BETWEEN 1 AND 2 AND y` is `(x BETWEEN 1 AND 2) AND y`.
+
+An operator never takes an operand that binds more loosely without
+parentheses: write `a = (NOT b)` rather than `a = NOT b`, and
+`(a IS NULL) || b` rather than `a IS NULL || b`.
+
+Expressions may nest at most 200 levels deep (`MAX_DEPTH`). That counts
+parentheses, prefix operators, `CASE`, calls and `IN` lists, and also the
+height of the tree, so a chain of more than 200 binary operators
+(`1 + 1 + ... + 1`) is rejected too. Deeper input is an error, never a stack
+overflow.
+
+### Canonical form
+
+`Display` on any syntax tree type prints SQL that parses back to an equal
+tree: upper-case keywords, `<>` for not-equal, `JOIN` for `INNER JOIN`, no
+`ASC`, reals always with a `.` or exponent, identifiers quoted only when
+needed (`"Order"`, `"select"`), and only the parentheses the tree needs.
+`Expr::fully_parenthesized` wraps every operator instead.
 
 ## Development
 
