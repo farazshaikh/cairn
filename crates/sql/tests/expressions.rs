@@ -14,6 +14,15 @@ fn depth_error(src: &str) -> cairn_sql::SqlError {
     error
 }
 
+fn span(start: usize, end: usize, line: usize, column: usize) -> Span {
+    Span {
+        start,
+        end,
+        line,
+        column,
+    }
+}
+
 fn column_name(expr: &Expr) -> (Option<&str>, &str) {
     let ExprKind::Column { table, name } = &expr.node else {
         panic!("not a column: {expr:?}");
@@ -134,8 +143,10 @@ fn case_with_and_without_else() {
         panic!("expected CASE");
     };
     assert_eq!(branches.len(), 2);
-    assert_eq!(branches[1].condition, expr("b"));
-    assert_eq!(branches[1].result, expr("2"));
+    assert_eq!(branches[1].node.condition, expr("b"));
+    assert_eq!(branches[1].node.result, expr("2"));
+    assert_eq!(branches[0].span, span(5, 18, 1, 6));
+    assert_eq!(branches[1].span, span(19, 32, 1, 20));
     assert_eq!(else_result.map(|result| *result), Some(expr("3")));
     let ExprKind::Case { else_result, .. } = expr("CASE WHEN a THEN 1 END").node else {
         panic!("expected CASE");
@@ -191,12 +202,6 @@ fn parentheses_are_not_nodes() {
 
 #[test]
 fn expression_spans_cover_their_source_text() {
-    let span = |start, end, line, column| Span {
-        start,
-        end,
-        line,
-        column,
-    };
     let comparison = expr("x = a + b");
     assert_eq!(comparison.span, span(0, 9, 1, 1));
     let ExprKind::Binary { right, .. } = &comparison.node else {

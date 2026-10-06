@@ -222,7 +222,7 @@ impl Parser<'_> {
     fn case(&mut self) -> ParseResult<Parsed> {
         let case_span = self.bump();
         self.enter(Descent::NestedNode, case_span)?;
-        self.expect_keyword(Keyword::When, "after CASE")?;
+        let mut when_span = self.expect_keyword(Keyword::When, "after CASE")?;
         let mut branches = Vec::new();
         let mut height = 0;
         let else_result = loop {
@@ -230,11 +230,14 @@ impl Parser<'_> {
             self.expect_keyword(Keyword::Then, "after WHEN condition")?;
             let result = self.expr_bp(precedence::OR)?;
             height = height.max(condition.height).max(result.height);
-            branches.push(CaseBranch {
+            let span = when_span.until(result.expr.span);
+            let branch = CaseBranch {
                 condition: *condition.expr,
                 result: *result.expr,
-            });
-            if self.eat_keyword(Keyword::When).is_some() {
+            };
+            branches.push(Spanned::new(branch, span));
+            if let Some(next_when) = self.eat_keyword(Keyword::When) {
+                when_span = next_when;
                 continue;
             }
             if self.eat_keyword(Keyword::Else).is_some() {

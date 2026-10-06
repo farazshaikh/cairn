@@ -70,6 +70,8 @@ fn distinct_wildcards_and_aliases() {
 fn from_with_table_alias() {
     let query = select("SELECT s.a FROM t AS s");
     let from = query.from.expect("FROM clause");
+    assert_eq!(from.span, span(11, 22, 1, 12));
+    let from = from.node;
     assert_eq!(name(&from.table.node.name), "t");
     assert_eq!(from.table.node.alias.as_ref().map(name), Some("s"));
     assert_eq!(from.table.span, span(16, 22, 1, 17));
@@ -81,6 +83,8 @@ fn joins_inner_and_left_chained() {
     let src =
         "SELECT * FROM a JOIN b ON a.id = b.id INNER JOIN c AS d ON TRUE LEFT JOIN e ON e.k = d.k";
     let from = select(src).from.expect("FROM clause");
+    assert_eq!(from.span, span(9, 88, 1, 10));
+    let from = from.node;
     let joins: Vec<_> = from
         .joins
         .iter()
@@ -163,13 +167,26 @@ fn order_by_directions() {
 #[test]
 fn limit_with_and_without_offset() {
     let limit = select("SELECT a FROM t LIMIT 10").limit.expect("LIMIT");
+    assert_eq!(limit.span, span(16, 24, 1, 17));
+    let limit = limit.node;
     assert_eq!(limit.count.node, 10);
     assert_eq!(limit.count.span, span(22, 24, 1, 23));
     assert!(limit.offset.is_none());
     let limit = select("SELECT a FROM t LIMIT 10 OFFSET 5")
         .limit
         .expect("LIMIT");
-    assert_eq!(limit.offset.map(|offset| offset.node), Some(5));
+    assert_eq!(limit.span, span(16, 33, 1, 17));
+    assert_eq!(limit.node.offset.map(|offset| offset.node), Some(5));
+}
+
+#[test]
+fn clause_spans_include_their_keyword_and_track_lines() {
+    let query = select("SELECT a\nFROM t\nLIMIT 1");
+    assert_eq!(query.from.map(|from| from.span), Some(span(9, 15, 2, 1)));
+    assert_eq!(
+        query.limit.map(|limit| limit.span),
+        Some(span(16, 23, 3, 1))
+    );
 }
 
 #[test]
@@ -179,12 +196,18 @@ fn every_clause_together() {
     let query = select(src);
     assert!(query.distinct);
     assert_eq!(query.items.len(), 2);
-    assert_eq!(query.from.as_ref().map(|from| from.joins.len()), Some(1));
+    assert_eq!(
+        query.from.as_ref().map(|from| from.node.joins.len()),
+        Some(1)
+    );
     assert_eq!(query.where_clause, Some(expr("t.a IS NOT NULL")));
     assert_eq!(query.group_by, vec![expr("t.a")]);
     assert_eq!(query.having, Some(expr("count(*) >= 2")));
     assert_eq!(query.order_by.len(), 2);
-    assert_eq!(query.limit.as_ref().map(|limit| limit.count.node), Some(5));
+    assert_eq!(
+        query.limit.as_ref().map(|limit| limit.node.count.node),
+        Some(5)
+    );
     assert_eq!(
         query.to_string(),
         "SELECT DISTINCT t.a, count(DISTINCT u.b) AS n FROM t AS t LEFT JOIN u ON u.id = t.id \

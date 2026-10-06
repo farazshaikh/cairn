@@ -411,9 +411,9 @@ fn write_expr(f: &mut Formatter<'_>, expr: &ExprKind, mode: Mode) -> fmt::Result
             f.write_str("CASE")?;
             for branch in branches {
                 f.write_str(" WHEN ")?;
-                write_operand(f, &branch.condition, false, mode)?;
+                write_operand(f, &branch.node.condition, false, mode)?;
                 f.write_str(" THEN ")?;
-                write_operand(f, &branch.result, false, mode)?;
+                write_operand(f, &branch.node.result, false, mode)?;
             }
             if let Some(else_result) = else_result {
                 f.write_str(" ELSE ")?;
@@ -610,7 +610,7 @@ mod tests {
         expr(ExprKind::Case {
             branches: branches
                 .into_iter()
-                .map(|(condition, result)| CaseBranch { condition, result })
+                .map(|(condition, result)| Spanned::new(CaseBranch { condition, result }, SPAN))
                 .collect(),
             else_result: else_result.map(Box::new),
         })
@@ -896,29 +896,32 @@ mod tests {
                     SPAN,
                 ),
             ],
-            from: Some(FromClause {
-                table: Spanned::new(
-                    TableRef {
-                        name: ident("t"),
-                        alias: None,
-                    },
-                    SPAN,
-                ),
-                joins: vec![Spanned::new(
-                    Join {
-                        kind: JoinKind::Left,
-                        table: Spanned::new(
-                            TableRef {
-                                name: ident("u"),
-                                alias: Some(ident("v")),
-                            },
-                            SPAN,
-                        ),
-                        on: bin(BinaryOp::Eq, col("a"), col("b")),
-                    },
-                    SPAN,
-                )],
-            }),
+            from: Some(Spanned::new(
+                FromClause {
+                    table: Spanned::new(
+                        TableRef {
+                            name: ident("t"),
+                            alias: None,
+                        },
+                        SPAN,
+                    ),
+                    joins: vec![Spanned::new(
+                        Join {
+                            kind: JoinKind::Left,
+                            table: Spanned::new(
+                                TableRef {
+                                    name: ident("u"),
+                                    alias: Some(ident("v")),
+                                },
+                                SPAN,
+                            ),
+                            on: bin(BinaryOp::Eq, col("a"), col("b")),
+                        },
+                        SPAN,
+                    )],
+                },
+                SPAN,
+            )),
             where_clause: Some(col("c")),
             group_by: vec![col("a"), col("b")],
             having: Some(col("d")),
@@ -929,10 +932,13 @@ mod tests {
                 },
                 SPAN,
             )],
-            limit: Some(Limit {
-                count: Spanned::new(10, SPAN),
-                offset: Some(Spanned::new(5, SPAN)),
-            }),
+            limit: Some(Spanned::new(
+                Limit {
+                    count: Spanned::new(10, SPAN),
+                    offset: Some(Spanned::new(5, SPAN)),
+                },
+                SPAN,
+            )),
         };
         assert_eq!(
             select.to_string(),

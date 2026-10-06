@@ -121,12 +121,12 @@ pub struct Delete {
 pub struct Select {
     pub distinct: bool,
     pub items: Vec<Spanned<SelectItem>>,
-    pub from: Option<FromClause>,
+    pub from: Option<Spanned<FromClause>>,
     pub where_clause: Option<Expr>,
     pub group_by: Vec<Expr>,
     pub having: Option<Expr>,
     pub order_by: Vec<Spanned<OrderItem>>,
-    pub limit: Option<Limit>,
+    pub limit: Option<Spanned<Limit>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -217,7 +217,7 @@ pub enum ExprKind {
         negated: bool,
     },
     Case {
-        branches: Vec<CaseBranch>,
+        branches: Vec<Spanned<CaseBranch>>,
         else_result: Option<Box<Expr>>,
     },
     Function {

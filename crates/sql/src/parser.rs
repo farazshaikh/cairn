@@ -350,7 +350,7 @@ impl<'a> Parser<'a> {
             items.push(self.select_item()?);
         }
         let from = match self.eat_keyword(Keyword::From) {
-            Some(_) => Some(self.select_from()?),
+            Some(start) => Some(self.select_from(start)?),
             None => None,
         };
         let where_clause = self.where_clause()?;
@@ -372,7 +372,7 @@ impl<'a> Parser<'a> {
             }
         }
         let limit = match self.eat_keyword(Keyword::Limit) {
-            Some(_) => Some(self.limit()?),
+            Some(start) => Some(self.limit(start)?),
             None => None,
         };
         Ok(Select {
@@ -420,13 +420,15 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn select_from(&mut self) -> ParseResult<FromClause> {
+    /// The clause after an already consumed `FROM` at `start`; its span includes `FROM`.
+    fn select_from(&mut self, start: Span) -> ParseResult<Spanned<FromClause>> {
         let table = self.table_ref("after FROM")?;
         let mut joins = Vec::new();
         while let Some(join) = self.join()? {
             joins.push(join);
         }
-        Ok(FromClause { table, joins })
+        let span = start.until(self.last);
+        Ok(Spanned::new(FromClause { table, joins }, span))
     }
 
     fn table_ref(&mut self, context: &str) -> ParseResult<Spanned<TableRef>> {
@@ -468,13 +470,15 @@ impl<'a> Parser<'a> {
         Ok(Spanned::new(OrderItem { expr, descending }, span))
     }
 
-    fn limit(&mut self) -> ParseResult<Limit> {
+    /// The clause after an already consumed `LIMIT` at `start`; its span includes `LIMIT`.
+    fn limit(&mut self, start: Span) -> ParseResult<Spanned<Limit>> {
         let count = self.integer("after LIMIT")?;
         let offset = match self.eat_keyword(Keyword::Offset) {
             Some(_) => Some(self.integer("after OFFSET")?),
             None => None,
         };
-        Ok(Limit { count, offset })
+        let span = start.until(self.last);
+        Ok(Spanned::new(Limit { count, offset }, span))
     }
 
     fn integer(&mut self, context: &str) -> ParseResult<Spanned<i64>> {
