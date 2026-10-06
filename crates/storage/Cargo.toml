@@ -1,0 +1,10 @@
+[package]
+name = "cairn-storage"
+description = "Page file, buffer pool and B-tree storage for cairn"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

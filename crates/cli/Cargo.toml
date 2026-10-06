@@ -1,0 +1,17 @@
+[package]
+name = "cairn-cli"
+description = "Interactive shell for cairn databases"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "cairn"
+path = "src/main.rs"
+
+[dependencies]
+cairn-exec = { path = "../exec" }
+
+[lints]
+workspace = true

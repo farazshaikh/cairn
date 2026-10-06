@@ -1,0 +1,10 @@
+[package]
+name = "cairn-sql"
+description = "SQL tokenizer, parser and syntax tree for cairn"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
