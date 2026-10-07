@@ -1,0 +1,25 @@
+affected 0
+
+affected 3
+
+id	size
+1	small
+2	big
+3	NULL
+
+id	sign
+1	pos
+2	pos
+3	other
+
+v
+0.5
+1.0
+0.5
+
+first
+a
+
+error: line 7, column 18: type mismatch: CASE condition needs BOOLEAN, found INTEGER
+
+error: line 8, column 8: type mismatch: CASE branches have types INTEGER and TEXT

@@ -1,0 +1,27 @@
+affected 0
+
+affected 0
+
+affected 0
+
+step	depth	operation	detail
+0	0	PROJECT	name, tag
+1	1	INDEX JOIN	INNER b USING INDEX b_aid (aid = a.id)
+2	2	SCAN	a
+
+step	depth	operation	detail
+0	0	PROJECT	name, tag
+1	1	INDEX JOIN	LEFT a USING PRIMARY KEY (id = b.aid)
+2	2	SCAN	b
+
+step	depth	operation	detail
+0	0	PROJECT	name, tag
+1	1	NESTED LOOP JOIN	INNER
+2	2	SCAN	a
+3	2	SCAN	b
+
+step	depth	operation	detail
+0	0	PROJECT	name
+1	1	FILTER	a.id = 1
+2	2	INDEX JOIN	INNER b USING INDEX b_aid (aid = a.id)
+3	3	PRIMARY KEY LOOKUP	a (id = 1)

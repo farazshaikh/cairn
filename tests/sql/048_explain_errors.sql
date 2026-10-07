@@ -1,0 +1,7 @@
+CREATE TABLE "explain" (x INTEGER);
+INSERT INTO "explain" VALUES (1);
+SELECT x FROM "explain";
+EXPLAIN INSERT INTO "explain" VALUES (2);
+SELECT 1; EXPLAIN SELECT x FROM "explain"; SELECT 2;
+EXPLAIN UPDATE "explain" SET x = 3;
+SELECT COUNT(*) AS n FROM "explain";

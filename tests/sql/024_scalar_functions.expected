@@ -1,0 +1,19 @@
+a	b	c	d
+hello	STRASSE	5	0
+
+a	b	c	d
+5	2.5	0.5	NULL
+
+a	b	c	d
+3	x	1.0	NULL
+
+a	b	c
+NULL	NULL	NULL
+
+affected 0
+
+affected 2
+
+upper(s)	length(s)
+MIXED CASE	10
+NULL	NULL

@@ -1,0 +1,9 @@
+CREATE TABLE t (a INTEGER, b TEXT);
+INSERT INTO t VALUES (1, 'x'), (2, 'x'), (NULL, 'y'), (NULL, 'z');
+CREATE UNIQUE INDEX t_b ON t (b);
+CREATE UNIQUE INDEX t_a ON t (a);
+INSERT INTO t VALUES (1, 'w');
+INSERT INTO t VALUES (NULL, 'w');
+CREATE INDEX t_b ON t (b);
+EXPLAIN SELECT a FROM t WHERE b = 'x';
+SELECT a, b FROM t WHERE b = 'x';

@@ -1,0 +1,12 @@
+affected 0
+
+affected 1
+
+error: line 3, column 22: NOT NULL constraint failed: t.a
+
+error: line 4, column 26: NOT NULL constraint failed: t.b
+
+error: line 5, column 39: NOT NULL constraint failed: t.b
+
+a	b	c
+1	x	NULL

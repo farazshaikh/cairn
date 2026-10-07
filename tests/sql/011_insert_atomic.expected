@@ -1,0 +1,14 @@
+affected 0
+
+affected 1
+
+error: line 3, column 48: UNIQUE constraint failed: t.u
+
+error: line 4, column 35: PRIMARY KEY constraint failed: t.id
+
+error: line 5, column 44: integer overflow
+
+error: line 6, column 35: NOT NULL constraint failed: t.n
+
+id	u	n
+1	a	1

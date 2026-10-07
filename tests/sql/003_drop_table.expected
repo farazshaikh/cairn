@@ -1,0 +1,20 @@
+affected 0
+
+affected 2
+
+affected 0
+
+error: line 4, column 15: no such table: t
+
+error: line 5, column 12: no such table: t
+
+affected 0
+
+affected 0
+
+b
+
+affected 1
+
+b
+new

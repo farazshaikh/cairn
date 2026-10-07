@@ -1,0 +1,17 @@
+error: line 1, column 8: no such function: nope
+
+error: line 2, column 8: wrong number of arguments to LOWER: expected 1, found 2
+
+error: line 3, column 8: wrong number of arguments to COALESCE: expected at least 1, found 0
+
+error: line 4, column 8: LOWER does not accept * or DISTINCT
+
+error: line 5, column 8: SUM does not accept * or DISTINCT
+
+affected 0
+
+error: line 7, column 23: aggregate functions are not allowed in WHERE
+
+error: line 8, column 8: type mismatch: cannot apply LOWER to INTEGER
+
+error: line 9, column 8: type mismatch: cannot apply SUM to TEXT

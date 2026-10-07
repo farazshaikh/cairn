@@ -1,0 +1,23 @@
+error: line 1, column 8: integer overflow
+
+error: line 2, column 8: integer overflow
+
+error: line 3, column 8: integer overflow
+
+error: line 4, column 8: integer overflow
+
+error: line 5, column 8: integer overflow
+
+error: line 6, column 8: integer overflow
+
+affected 0
+
+affected 2
+
+error: line 9, column 8: integer overflow
+
+a
+4.611686018427388e18
+
+ok
+9223372036854775807

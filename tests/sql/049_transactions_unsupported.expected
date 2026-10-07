@@ -1,0 +1,10 @@
+error: line 1, column 1: BEGIN is not supported yet
+
+affected 0
+
+error: line 3, column 1: COMMIT is not supported yet
+
+error: line 4, column 1: ROLLBACK is not supported yet
+
+n
+0

@@ -1,0 +1,8 @@
+CREATE TABLE t (id INTEGER PRIMARY KEY, a INTEGER, b INTEGER);
+INSERT INTO t VALUES (1, 10, 100), (2, NULL, 200), (3, 30, 300);
+UPDATE t SET a = a + 1 WHERE a > 10;
+UPDATE t SET b = 0 WHERE a = NULL;
+UPDATE t SET a = b, b = a WHERE id = 1;
+UPDATE t SET b = b + 1;
+SELECT id, a, b FROM t;
+UPDATE t SET a = 1 WHERE id = 99;

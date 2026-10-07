@@ -1,0 +1,12 @@
+affected 0
+
+c	cv	s	a	lo	hi
+0	0	NULL	NULL	NULL	NULL
+
+g	c
+
+affected 3
+
+g	c	cv	s	a	lo
+NULL	1	1	3	3.0	3
+x	2	0	NULL	NULL	NULL

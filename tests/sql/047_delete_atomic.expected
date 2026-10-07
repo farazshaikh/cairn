@@ -1,0 +1,17 @@
+affected 0
+
+affected 3
+
+error: line 3, column 21: division by zero
+
+id
+1
+2
+3
+
+error: line 5, column 18: division by zero
+
+id	a
+1	5
+2	0
+3	7

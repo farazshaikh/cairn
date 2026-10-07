@@ -1,0 +1,32 @@
+affected 0
+
+affected 0
+
+step	depth	operation	detail
+0	0	PROJECT	id
+1	1	FILTER	b = 'x'
+2	2	SCAN	t
+
+step	depth	operation	detail
+0	0	PROJECT	id
+1	1	FILTER	a + 1 = 2
+2	2	SCAN	t
+
+step	depth	operation	detail
+0	0	PROJECT	id
+1	1	FILTER	a = 1 OR a = 2
+2	2	SCAN	t
+
+step	depth	operation	detail
+0	0	PROJECT	id
+1	1	FILTER	a = id
+2	2	SCAN	t
+
+step	depth	operation	detail
+0	0	PROJECT	id
+1	1	FILTER	a = 1.5
+2	2	SCAN	t
+
+step	depth	operation	detail
+0	0	PROJECT	id
+1	1	SCAN	t

@@ -1,0 +1,32 @@
+affected 0
+
+affected 7
+
+id
+1
+3
+
+id
+1
+2
+
+id
+1
+2
+3
+4
+5
+7
+
+id
+4
+5
+7
+
+id
+7
+
+a	b	c	d
+TRUE	FALSE	NULL	FALSE
+
+error: line 9, column 24: type mismatch: cannot apply LIKE to INTEGER and TEXT

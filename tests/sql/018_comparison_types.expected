@@ -1,0 +1,23 @@
+affected 0
+
+affected 2
+
+i
+2
+
+i
+3
+
+s
+a
+
+b
+TRUE
+
+error: line 7, column 23: type mismatch: cannot compare TEXT with INTEGER
+
+error: line 8, column 23: type mismatch: cannot compare BOOLEAN with INTEGER
+
+error: line 9, column 23: type mismatch: cannot apply + to INTEGER and TEXT
+
+error: line 10, column 23: type mismatch: WHERE needs BOOLEAN, found INTEGER

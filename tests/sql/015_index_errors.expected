@@ -1,0 +1,13 @@
+affected 0
+
+affected 0
+
+error: line 3, column 14: index i already exists
+
+error: line 4, column 19: no such table: nope
+
+error: line 5, column 22: no such column: zz
+
+error: line 6, column 14: index name cairn_x is reserved (prefix cairn_)
+
+affected 0

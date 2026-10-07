@@ -1,0 +1,8 @@
+CREATE TABLE t (v TEXT);
+INSERT INTO t VALUES ('a'), ('b'), ('c');
+DELETE FROM t WHERE v = 'c';
+INSERT INTO t VALUES ('d');
+SELECT v FROM t;
+DELETE FROM t;
+INSERT INTO t VALUES ('e');
+SELECT v FROM t;

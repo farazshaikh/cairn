@@ -1,0 +1,13 @@
+affected 0
+
+error: line 2, column 14: table t already exists
+
+error: line 3, column 36: duplicate column name: a
+
+error: line 4, column 40: table v has more than one primary key
+
+error: line 5, column 14: invalid name: nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn (names are 1 to 64 bytes without NUL)
+
+affected 0
+
+error: line 7, column 15: no such table: u

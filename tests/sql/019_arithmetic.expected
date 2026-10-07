@@ -1,0 +1,13 @@
+a	b	c	d	e
+3	-3	1	-1	1
+
+a	b	c	d	e
+3.5	1.5	2	0.30000000000000004	1e300
+
+a	b	c	d
+6.0	-1.5	0.0	15
+
+a	b
+abc	NULL
+
+error: line 5, column 8: type mismatch: cannot apply % to REAL and INTEGER

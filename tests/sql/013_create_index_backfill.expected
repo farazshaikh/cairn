@@ -1,0 +1,25 @@
+affected 0
+
+affected 5
+
+affected 0
+
+id	a
+2	10
+5	10
+
+id	a
+3	20
+1	30
+
+step	depth	operation	detail
+0	0	PROJECT	id, a
+1	1	FILTER	a >= 20
+2	2	INDEX RANGE	t USING t_a (a >= 20)
+
+affected 1
+
+id
+2
+5
+6

@@ -1,0 +1,24 @@
+affected 0
+
+affected 1
+
+affected 1
+
+i	r	s	b
+1	2.0	x	FALSE
+NULL	-7.0	NULL	NULL
+
+error: line 5, column 27: type mismatch: column t.i is INTEGER but the value is TEXT
+
+error: line 6, column 27: type mismatch: column t.i is INTEGER but the value is REAL
+
+error: line 7, column 27: type mismatch: column t.s is TEXT but the value is INTEGER
+
+error: line 8, column 27: type mismatch: column t.b is BOOLEAN but the value is INTEGER
+
+error: line 9, column 27: type mismatch: column t.r is REAL but the value is TEXT
+
+error: line 10, column 27: type mismatch: column t.i is INTEGER but the value is REAL
+
+n
+2

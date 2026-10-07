@@ -1,0 +1,13 @@
+CREATE TABLE t (id INTEGER PRIMARY KEY, u TEXT UNIQUE, n INTEGER NOT NULL);
+INSERT INTO t VALUES (1, 'a', 1), (2, 'b', 2), (3, 'c', 3);
+UPDATE t SET id = id + 1;
+SELECT id, u FROM t;
+UPDATE t SET id = 3 WHERE id = 2;
+UPDATE t SET u = 'b' WHERE id = 4;
+UPDATE t SET u = 'z';
+UPDATE t SET n = NULL WHERE id = 2;
+UPDATE t SET n = 'x';
+UPDATE t SET nope = 1;
+UPDATE t SET n = 1, n = 2;
+UPDATE t SET u = u || '!' WHERE id >= 3;
+SELECT id, u, n FROM t;

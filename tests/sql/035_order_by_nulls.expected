@@ -1,0 +1,31 @@
+affected 0
+
+affected 5
+
+id	a
+2	NULL
+5	NULL
+3	1
+1	3
+4	3
+
+id	a
+1	3
+4	3
+3	1
+2	NULL
+5	NULL
+
+id	a	b
+4	3	NULL
+1	3	x
+3	1	x
+5	NULL	a
+2	NULL	y
+
+id
+4
+5
+3
+1
+2

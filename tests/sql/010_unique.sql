@@ -1,0 +1,5 @@
+CREATE TABLE t (id INTEGER PRIMARY KEY, email TEXT UNIQUE);
+INSERT INTO t VALUES (1, 'a@x'), (2, NULL), (3, NULL);
+INSERT INTO t VALUES (4, 'a@x');
+INSERT INTO t VALUES (5, 'b@x'), (6, 'b@x');
+SELECT id, email FROM t;

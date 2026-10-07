@@ -1,0 +1,23 @@
+affected 0
+
+affected 1
+
+x
+1
+
+error: line 4, column 1: EXPLAIN supports only SELECT
+
+1
+1
+
+step	depth	operation	detail
+0	0	PROJECT	x
+1	1	SCAN	explain
+
+2
+2
+
+error: line 6, column 1: EXPLAIN supports only SELECT
+
+n
+1

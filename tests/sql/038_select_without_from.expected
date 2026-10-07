@@ -1,0 +1,11 @@
+one	two	three	four	five
+1	two	3.0	NULL	TRUE
+
+1 + 2	'it''s'	-5
+3	it's	-5
+
+1
+
+error: line 4, column 8: SELECT * requires a FROM clause
+
+error: line 5, column 8: no such column: nope

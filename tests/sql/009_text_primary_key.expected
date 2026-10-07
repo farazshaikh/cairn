@@ -1,0 +1,16 @@
+affected 0
+
+affected 2
+
+error: line 3, column 22: PRIMARY KEY constraint failed: t.code
+
+error: line 4, column 22: NOT NULL constraint failed: t.code
+
+code	n
+b	1
+a	2
+
+step	depth	operation	detail
+0	0	PROJECT	n
+1	1	FILTER	code = 'a'
+2	2	INDEX LOOKUP	t USING cairn_autoindex_t_code (code = 'a')

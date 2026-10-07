@@ -1,0 +1,15 @@
+affected 0
+
+error: line 2, column 11: column v must appear in GROUP BY or be used in an aggregate function
+
+error: line 3, column 8: column v must appear in GROUP BY or be used in an aggregate function
+
+error: line 4, column 12: aggregate functions cannot be nested
+
+error: line 5, column 26: aggregate functions are not allowed in GROUP BY
+
+error: line 6, column 37: column v must appear in GROUP BY or be used in an aggregate function
+
+error: line 7, column 35: column v must appear in GROUP BY or be used in an aggregate function
+
+error: line 8, column 35: type mismatch: HAVING needs BOOLEAN, found INTEGER

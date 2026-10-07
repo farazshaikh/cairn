@@ -1,0 +1,7 @@
+CREATE TABLE t (a INTEGER);
+CREATE INDEX i ON t (a);
+CREATE INDEX i ON t (a);
+CREATE INDEX j ON nope (a);
+CREATE INDEX j ON t (zz);
+CREATE INDEX cairn_x ON t (a);
+CREATE INDEX t ON t (a);

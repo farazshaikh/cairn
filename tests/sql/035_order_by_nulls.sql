@@ -1,0 +1,6 @@
+CREATE TABLE t (id INTEGER PRIMARY KEY, a INTEGER, b TEXT);
+INSERT INTO t VALUES (1, 3, 'x'), (2, NULL, 'y'), (3, 1, 'x'), (4, 3, NULL), (5, NULL, 'a');
+SELECT id, a FROM t ORDER BY a;
+SELECT id, a FROM t ORDER BY a DESC;
+SELECT id, a, b FROM t ORDER BY a DESC, b;
+SELECT id FROM t ORDER BY b, id DESC;

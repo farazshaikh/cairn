@@ -1,0 +1,22 @@
+affected 0
+
+affected 4
+
+error: line 3, column 21: cannot create unique index t_b: column t.b has duplicate values
+
+affected 0
+
+error: line 5, column 22: UNIQUE constraint failed: t.a
+
+affected 1
+
+affected 0
+
+step	depth	operation	detail
+0	0	PROJECT	a
+1	1	FILTER	b = 'x'
+2	2	INDEX LOOKUP	t USING t_b (b = 'x')
+
+a	b
+1	x
+2	x

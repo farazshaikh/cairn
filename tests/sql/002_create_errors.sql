@@ -1,0 +1,7 @@
+CREATE TABLE t (a INTEGER);
+CREATE TABLE t (b INTEGER);
+CREATE TABLE u (a INTEGER, b TEXT, a REAL);
+CREATE TABLE v (a INTEGER PRIMARY KEY, b TEXT PRIMARY KEY);
+CREATE TABLE nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn (a INTEGER);
+CREATE TABLE w (x INTEGER);
+SELECT * FROM u;

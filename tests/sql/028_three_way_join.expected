@@ -1,0 +1,22 @@
+affected 0
+
+affected 0
+
+affected 0
+
+affected 3
+
+affected 3
+
+affected 3
+
+name	id	item
+ann	10	pen
+ann	10	ink
+ann	11	NULL
+bob	12	cup
+
+name	items
+ann	2
+bob	1
+cy	0

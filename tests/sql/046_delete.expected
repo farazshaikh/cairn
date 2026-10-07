@@ -1,0 +1,22 @@
+affected 0
+
+affected 4
+
+affected 0
+
+affected 2
+
+id	a
+1	1
+2	NULL
+
+affected 0
+
+affected 2
+
+n
+0
+
+error: line 9, column 13: no such table: nope
+
+error: line 10, column 21: no such column: zz

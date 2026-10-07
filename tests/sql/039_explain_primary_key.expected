@@ -1,0 +1,31 @@
+affected 0
+
+affected 3
+
+step	depth	operation	detail
+0	0	PROJECT	v
+1	1	FILTER	id = 5
+2	2	PRIMARY KEY LOOKUP	t (id = 5)
+
+v
+b
+
+step	depth	operation	detail
+0	0	PROJECT	v
+1	1	FILTER	id > 1 AND id <= 9
+2	2	PRIMARY KEY RANGE	t (id > 1 AND id <= 9)
+
+v
+b
+c
+
+step	depth	operation	detail
+0	0	PROJECT	v
+1	1	FILTER	id BETWEEN 2 AND 6
+2	2	PRIMARY KEY RANGE	t (id >= 2 AND id <= 6)
+
+step	depth	operation	detail
+0	0	LIMIT	limit 1 offset 0
+1	1	PROJECT	id, v
+2	2	FILTER	id < 0
+3	3	PRIMARY KEY RANGE	t (id < 0)

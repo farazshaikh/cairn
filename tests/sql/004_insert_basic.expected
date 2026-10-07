@@ -1,0 +1,13 @@
+affected 0
+
+affected 1
+
+affected 1
+
+affected 2
+
+a	b	c
+1	one	1.5
+NULL	only b	NULL
+2	NULL	2.5
+3	NULL	3.5

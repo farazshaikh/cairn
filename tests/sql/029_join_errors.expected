@@ -1,0 +1,15 @@
+affected 0
+
+affected 0
+
+error: line 3, column 22: table name a is used more than once in FROM
+
+error: line 4, column 8: ambiguous column name: id
+
+error: line 5, column 29: no such table or alias: c
+
+error: line 6, column 38: no such column: b.nope
+
+error: line 7, column 44: no such table: missing
+
+error: line 8, column 34: no such table or alias: a

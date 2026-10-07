@@ -1,0 +1,12 @@
+affected 0
+
+affected 3
+
+error: line 3, column 22: UNIQUE constraint failed: t.email
+
+error: line 4, column 34: UNIQUE constraint failed: t.email
+
+id	email
+1	a@x
+2	NULL
+3	NULL

@@ -1,0 +1,32 @@
+affected 0
+
+affected 0
+
+affected 0
+
+affected 3
+
+step	depth	operation	detail
+0	0	PROJECT	id
+1	1	FILTER	a = 7
+2	2	INDEX LOOKUP	t USING t_a (a = 7)
+
+step	depth	operation	detail
+0	0	PROJECT	id
+1	1	FILTER	a >= 1 AND a < 10
+2	2	INDEX RANGE	t USING t_a (a >= 1 AND a < 10)
+
+step	depth	operation	detail
+0	0	PROJECT	id
+1	1	FILTER	b = 'y' AND a > 0
+2	2	INDEX LOOKUP	t USING t_b (b = 'y')
+
+step	depth	operation	detail
+0	0	PROJECT	id
+1	1	FILTER	a = NULL
+2	2	INDEX LOOKUP	t USING t_a (a = NULL)
+
+id
+
+id
+2

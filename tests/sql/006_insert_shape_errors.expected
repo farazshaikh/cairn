@@ -1,0 +1,18 @@
+affected 0
+
+error: line 2, column 22: table t has 2 columns but 1 values were supplied
+
+error: line 3, column 26: 1 columns were named but 2 values were supplied
+
+error: line 4, column 19: no such column: zz
+
+error: line 5, column 19: column a is listed more than once
+
+error: line 6, column 23: column references are not allowed in VALUES
+
+error: line 7, column 13: no such table: nope
+
+error: line 8, column 33: table t has 2 columns but 1 values were supplied
+
+n
+0

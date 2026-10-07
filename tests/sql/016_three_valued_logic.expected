@@ -1,0 +1,8 @@
+a	b	c	d	e
+NULL	FALSE	TRUE	NULL	NULL
+
+a	b	c	d	e
+TRUE	FALSE	FALSE	NULL	NULL
+
+a	b	c
+TRUE	TRUE	TRUE

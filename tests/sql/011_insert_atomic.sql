@@ -1,0 +1,7 @@
+CREATE TABLE t (id INTEGER PRIMARY KEY, u TEXT UNIQUE, n INTEGER NOT NULL);
+INSERT INTO t VALUES (1, 'a', 1);
+INSERT INTO t VALUES (2, 'b', 2), (3, 'c', 3), (4, 'a', 4);
+INSERT INTO t VALUES (2, 'b', 2), (2, 'c', 3);
+INSERT INTO t VALUES (2, 'b', 2), (3, 'c', 9223372036854775807 + 1);
+INSERT INTO t VALUES (2, 'b', 2), (3, 'c', NULL);
+SELECT id, u, n FROM t;

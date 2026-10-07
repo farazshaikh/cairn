@@ -1,0 +1,19 @@
+error: line 1, column 8: division by zero
+
+error: line 2, column 8: division by zero
+
+error: line 3, column 8: division by zero
+
+error: line 4, column 8: division by zero
+
+affected 0
+
+affected 2
+
+error: line 7, column 23: division by zero
+
+a	q
+1	10
+
+n
+NULL

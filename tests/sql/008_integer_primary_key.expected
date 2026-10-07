@@ -1,0 +1,21 @@
+affected 0
+
+affected 3
+
+id	v
+10	a
+20	b
+30	c
+
+error: line 4, column 22: PRIMARY KEY constraint failed: t.id
+
+error: line 5, column 26: NOT NULL constraint failed: t.id
+
+affected 2
+
+id	v
+-9223372036854775808	min
+10	a
+20	b
+30	c
+9223372036854775807	max
