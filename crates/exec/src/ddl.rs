@@ -10,7 +10,9 @@ use std::collections::BTreeSet;
 use cairn_sql::{CreateIndex, CreateTable, DropTable, Ident};
 use cairn_storage::{BTree, MAX_KEY_LEN};
 
-use crate::catalog::{ColumnDef, IMPLICIT_PREFIX, IndexDef, MAX_COLUMNS, TableDef, valid_name};
+use crate::catalog::{
+    ColumnDef, IMPLICIT_PREFIX, IndexDef, MAX_COLUMNS, MAX_NAME_LEN, TableDef, valid_name,
+};
 use crate::codec::key::index_key;
 use crate::database::{Database, QueryResult};
 use crate::error::{ErrorKind, ExecError};
@@ -123,13 +125,7 @@ impl Database {
             if !needs_index {
                 continue;
             }
-            let base = format!("{IMPLICIT_PREFIX}autoindex_{}_{}", table.name, column.name);
-            let mut name = base.clone();
-            let mut suffix = 2;
-            while taken.contains(&name) {
-                name = format!("{base}_{suffix}");
-                suffix += 1;
-            }
+            let name = implicit_index_name(&table.name, &column.name, &taken);
             taken.insert(name.clone());
             out.push((name, ordinal));
         }
@@ -256,4 +252,64 @@ impl Database {
 
 fn name_of(ident: &Ident) -> String {
     ident.node.0.clone()
+}
+
+/// The name of an implicit unique index: `cairn_autoindex_<table>_<column>`,
+/// cut at a character boundary so that it stays within `MAX_NAME_LEN`
+/// bytes (the limit the catalog enforces on load), and made unique among
+/// `taken` with a `_2`, `_3`, ... suffix that also fits the limit.
+fn implicit_index_name(table: &str, column: &str, taken: &BTreeSet<String>) -> String {
+    let full = format!("{IMPLICIT_PREFIX}autoindex_{table}_{column}");
+    let mut suffix = 1u64;
+    loop {
+        let tail = if suffix == 1 {
+            String::new()
+        } else {
+            format!("_{suffix}")
+        };
+        let name = format!("{}{tail}", truncate(&full, MAX_NAME_LEN - tail.len()));
+        if !taken.contains(&name) {
+            return name;
+        }
+        suffix += 1;
+    }
+}
+
+/// The longest prefix of `text` of at most `max` bytes that ends on a
+/// character boundary.
+fn truncate(text: &str, max: usize) -> &str {
+    let mut end = text.len().min(max);
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    text.get(..end).unwrap_or("")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn implicit_names_fit_the_name_limit_and_stay_unique() {
+        let long_table = "t".repeat(MAX_NAME_LEN);
+        let long_column = "c".repeat(MAX_NAME_LEN);
+        let mut taken = BTreeSet::new();
+        for _ in 0..12 {
+            let name = implicit_index_name(&long_table, &long_column, &taken);
+            assert!(name.len() <= MAX_NAME_LEN, "{name} is {} bytes", name.len());
+            assert!(valid_name(&name));
+            assert!(taken.insert(name));
+        }
+        assert_eq!(
+            implicit_index_name("people", "email", &BTreeSet::new()),
+            "cairn_autoindex_people_email"
+        );
+    }
+
+    #[test]
+    fn truncation_respects_character_boundaries() {
+        let text = format!("{}é", "a".repeat(63));
+        assert_eq!(truncate(&text, 64), "a".repeat(63));
+        assert_eq!(truncate("short", 64), "short");
+    }
 }

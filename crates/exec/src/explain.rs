@@ -10,9 +10,10 @@
 
 use std::ops::Bound;
 
-use cairn_sql::{Name, Span, SqlError, TokenKind, tokenize};
+use cairn_sql::{Name, Span, SqlError, Statement, TokenKind, tokenize};
 
 use crate::database::QueryResult;
+use crate::error::{ErrorKind, ExecError};
 use crate::plan::{Access, Plan, TableAccess};
 use crate::value::Value;
 
@@ -25,9 +26,29 @@ pub struct Preprocessed {
 }
 
 impl Preprocessed {
+    /// The EXPLAIN marker in front of each statement, if any. A marker that
+    /// no statement follows (`SELECT 1; EXPLAIN`) is a syntax error rather
+    /// than being dropped silently.
+    pub fn assign(&self, statements: &[Statement]) -> Result<Vec<Option<Span>>, ExecError> {
+        let mut assigned = Vec::with_capacity(statements.len());
+        let mut previous_end = 0;
+        for statement in statements {
+            assigned.push(self.marker_before(previous_end, statement.span.start));
+            previous_end = statement.span.end;
+        }
+        match self.markers.iter().find(|m| m.start >= previous_end) {
+            Some(dangling) => Err(ExecError::at(
+                ErrorKind::Syntax,
+                "expected SELECT after EXPLAIN",
+                *dangling,
+            )),
+            None => Ok(assigned),
+        }
+    }
+
     /// The marker in front of a statement starting at `start`, if any,
     /// after the previous statement ended at `previous_end`.
-    pub fn marker_before(&self, previous_end: usize, start: usize) -> Option<Span> {
+    fn marker_before(&self, previous_end: usize, start: usize) -> Option<Span> {
         self.markers
             .iter()
             .copied()

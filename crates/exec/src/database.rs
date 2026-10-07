@@ -86,11 +86,9 @@ impl Database {
     ) -> Result<Vec<Result<QueryResult, ExecError>>, ExecError> {
         let pre = explain::preprocess(sql).map_err(|e| ExecError::from_sql(e, sql))?;
         let statements = cairn_sql::parse(&pre.text).map_err(|e| ExecError::from_sql(e, sql))?;
+        let markers = pre.assign(&statements).map_err(|e| e.with_source(sql))?;
         let mut results = Vec::with_capacity(statements.len());
-        let mut previous_end = 0;
-        for statement in &statements {
-            let marker = pre.marker_before(previous_end, statement.span.start);
-            previous_end = statement.span.end;
+        for (statement, marker) in statements.iter().zip(markers) {
             let result = self
                 .statement(statement, marker)
                 .map_err(|e| e.with_source(sql));

@@ -409,8 +409,9 @@ select list.
   `NULL` in an `INTEGER PRIMARY KEY` is an error rather than a request for a
   new key.
 - Each `UNIQUE` column and each non-integer `PRIMARY KEY` gets an implicit
-  unique index named `cairn_autoindex_<table>_<column>`. User index names
-  may not start with `cairn_`.
+  unique index named `cairn_autoindex_<table>_<column>`. The name is cut to
+  the 64-byte name limit, with `_2`, `_3`, ... added if it would clash with
+  an existing index. User index names may not start with `cairn_`.
 - `CREATE [UNIQUE] INDEX` fills the new index from the existing rows. A
   unique index on a column that already has duplicate values is an error and
   creates nothing. Every insert, update and delete keeps all indexes up to
@@ -456,7 +457,9 @@ column is the primary key or indexed, the join probes it for each outer row
 `PROJECT`, `SORT`, `FILTER`, `AGGREGATE`, `NESTED LOOP JOIN`, `INDEX JOIN`,
 `SCAN`, `PRIMARY KEY LOOKUP`, `PRIMARY KEY RANGE`, `INDEX LOOKUP`,
 `INDEX RANGE` and `VALUES`. `EXPLAIN` is recognised only at the start of a
-statement and only before `SELECT`. A table named `"explain"` still works.
+statement and only before `SELECT`. An `EXPLAIN` with no statement after it
+is a syntax error, and nothing in the input runs. A table named `"explain"`
+still works.
 
 ### File format
 

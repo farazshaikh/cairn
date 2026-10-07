@@ -354,3 +354,82 @@ fn rows_and_index_keys_over_the_storage_limits_are_rejected() {
     assert_eq!(rows(&mut db, "SELECT COUNT(*) FROM t"), vec![vec![int(0)]]);
     db.check().expect("check");
 }
+
+#[test]
+fn maximum_length_names_with_implicit_indexes_survive_reopen() {
+    let tmp = TempDb::new("long-names");
+    let table = "t".repeat(64);
+    let other = format!("{}u", "t".repeat(63));
+    let column = "c".repeat(64);
+    let mut db = tmp.create();
+    db.execute(&format!(
+        "CREATE TABLE {table} (id INTEGER PRIMARY KEY, {column} TEXT UNIQUE);
+         CREATE TABLE {other} ({column} TEXT UNIQUE, k TEXT PRIMARY KEY);
+         INSERT INTO {table} VALUES (1, 'a'), (2, 'b');
+         INSERT INTO {other} VALUES ('a', 'x');"
+    ))
+    .expect("schema with 64-byte names");
+    db.close().expect("close");
+
+    let mut db = tmp.open();
+    db.check().expect("check after reopen");
+    let failed = error(&mut db, &format!("INSERT INTO {table} VALUES (3, 'a')"));
+    assert_eq!(
+        failed.message(),
+        format!("UNIQUE constraint failed: {table}.{column}")
+    );
+    let failed = error(&mut db, &format!("INSERT INTO {other} VALUES ('a', 'y')"));
+    assert_eq!(
+        failed.message(),
+        format!("UNIQUE constraint failed: {other}.{column}")
+    );
+    let failed = error(&mut db, &format!("INSERT INTO {other} VALUES ('b', 'x')"));
+    assert_eq!(
+        failed.message(),
+        format!("PRIMARY KEY constraint failed: {other}.k")
+    );
+    let plan = rows(
+        &mut db,
+        &format!("EXPLAIN SELECT id FROM {table} WHERE {column} = 'b'"),
+    );
+    assert_eq!(
+        plan.last().and_then(|r| r.get(2)).cloned(),
+        Some(Value::Text("INDEX LOOKUP".into()))
+    );
+    assert_eq!(
+        rows(
+            &mut db,
+            &format!("SELECT id FROM {table} WHERE {column} = 'b'")
+        ),
+        vec![vec![int(2)]]
+    );
+    db.execute(&format!("DROP TABLE {table}; DROP TABLE {other}"))
+        .expect("drop");
+    db.close().expect("close");
+    tmp.open().check().expect("check after drop and reopen");
+}
+
+#[test]
+fn explain_without_a_statement_is_a_syntax_error() {
+    let tmp = TempDb::new("lone-explain");
+    let mut db = tmp.create();
+    db.execute("CREATE TABLE t (a INTEGER)").expect("create");
+    for sql in [
+        "EXPLAIN",
+        "EXPLAIN;",
+        "SELECT 1; EXPLAIN",
+        "INSERT INTO t VALUES (1); EXPLAIN;",
+    ] {
+        let failed = error(&mut db, sql);
+        assert_eq!(failed.kind(), ErrorKind::Syntax, "{sql}: {failed}");
+        assert!(failed.span().is_some(), "{sql}");
+    }
+    let trailing = error(&mut db, "SELECT 1;\nEXPLAIN");
+    assert_eq!(trailing.message(), "expected SELECT after EXPLAIN");
+    assert_eq!(trailing.span().map(|s| (s.line, s.column)), Some((2, 1)));
+    assert_eq!(
+        rows(&mut db, "SELECT COUNT(*) FROM t"),
+        vec![vec![int(0)]],
+        "nothing ran"
+    );
+}
