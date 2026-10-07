@@ -56,6 +56,19 @@ pub enum StorageError {
     InvalidRootName,
     /// All 16 named root slots are in use.
     RootTableFull,
+    /// Another handle holds the write lock, or readers block a checkpoint.
+    Busy { reason: &'static str },
+    /// `commit`, `rollback` or `savepoint` was called with no transaction.
+    NoTransaction,
+    /// `begin` or `checkpoint` was called while this handle has a
+    /// transaction open.
+    TransactionOpen,
+    /// The savepoint was already released or rolled back.
+    InvalidSavepoint,
+    /// A sync of the log failed, so what is durable is unknown. The shared
+    /// file refuses every operation until all handles close and it is
+    /// reopened, which replays the log.
+    Unusable,
 }
 
 /// Result alias used throughout the crate.
@@ -96,6 +109,15 @@ impl fmt::Display for StorageError {
             StorageError::DatabaseFull => f.write_str("database full: page id space exhausted"),
             StorageError::InvalidRootName => f.write_str("root name must be 1 to 32 bytes"),
             StorageError::RootTableFull => f.write_str("root table full: at most 16 named roots"),
+            StorageError::Busy { reason } => write!(f, "database is busy: {reason}"),
+            StorageError::NoTransaction => f.write_str("no transaction is open"),
+            StorageError::TransactionOpen => {
+                f.write_str("a transaction is already open on this handle")
+            }
+            StorageError::InvalidSavepoint => f.write_str("savepoint does not exist"),
+            StorageError::Unusable => f.write_str(
+                "database file is unusable after a failed sync; close every handle and reopen",
+            ),
         }
     }
 }
@@ -183,6 +205,16 @@ mod tests {
                 "root name must be 1 to 32 bytes",
             ),
             (StorageError::RootTableFull, "root table full"),
+            (
+                StorageError::Busy {
+                    reason: "another handle has an open write transaction",
+                },
+                "database is busy: another handle has an open write transaction",
+            ),
+            (StorageError::NoTransaction, "no transaction is open"),
+            (StorageError::TransactionOpen, "already open on this handle"),
+            (StorageError::InvalidSavepoint, "savepoint does not exist"),
+            (StorageError::Unusable, "unusable after a failed sync"),
         ];
         for (error, expected) in cases {
             let text = error.to_string();

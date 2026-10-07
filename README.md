@@ -16,11 +16,12 @@ runs SQL interactively or from a script.
 | `crates/exec` | Catalog, planner and executor connecting SQL to storage |
 | `crates/cli` | The `cairn` interactive shell |
 
-Status: `crates/storage` provides the pager, buffer pool and B-tree (see
-[Storage](#storage)), `crates/sql` the tokenizer and parser (see
-[SQL](#sql)), and `crates/exec` the catalog, planner and executor (see
-[Querying](#querying)). The write-ahead log and `crates/cli` are scaffolds,
-each delivered by a later milestone.
+Status: `crates/storage` provides the pager, buffer pool, B-tree and
+write-ahead log (see [Storage](#storage) and
+[Transactions and durability](#transactions-and-durability)), `crates/sql`
+the tokenizer and parser (see [SQL](#sql)), and `crates/exec` the catalog,
+planner, executor and SQL transactions (see [Querying](#querying)).
+`crates/cli` is a scaffold delivered by a later milestone.
 
 ## Storage
 
@@ -89,13 +90,16 @@ bytes for internal nodes.
 
 ### Buffer pool
 
-Each `Pager` caches pages in a bounded pool. Its capacity is chosen at open
-(`create_with_capacity` / `open_with_capacity`; at least 8 pages, default
-256). The least recently used unpinned page is evicted, and dirty pages are
-written back on eviction and on `sync`. `pin` / `unpin` keep a page resident;
-pins nest. If every frame is pinned and another page is needed, the call
-returns `StorageError::PoolExhausted` and leaves the pager unchanged.
-`stats`, `resident` and `is_cached` expose the pool state.
+Each `Pager` caches committed pages in a bounded pool. Its capacity is chosen
+at open (`create_with_capacity` / `open_with_capacity`; at least 8 pages,
+default 256). The least recently used unpinned page is evicted. The pool
+never writes: uncommitted changes live in the transaction overlay and reach
+the file only through the write-ahead log (see
+[Transactions and durability](#transactions-and-durability)). `pin` /
+`unpin` keep a page resident; pins nest. If every frame is pinned and
+another page must be loaded, the call returns `StorageError::PoolExhausted`
+and leaves the pager unchanged. `stats`, `resident` and `is_cached` expose
+the pool state.
 
 ### API
 
@@ -117,25 +121,35 @@ pager.close()?;                         // sync and report errors
 ```
 
 - `Pager`: `create`, `open`, `create_with_capacity`, `open_with_capacity`,
-  `allocate`, `read`, `write`, `free`, `page_count`, `sync`, `close`, `pin`,
-  `unpin`, `free_list`, `set_root`, `root`, `remove_root`, `roots`, and the
+  `create_with` / `open_with` (a `Vfs` and `Options`), `allocate`, `read`,
+  `write`, `free`, `page_count`, `begin`, `commit`, `rollback`,
+  `in_transaction`, `savepoint`, `rollback_to`, `release`, `begin_read`,
+  `end_read`, `snapshot_seq`, `checkpoint`, `log_frames`, `sync`, `close`,
+  `pin`, `unpin`, `free_list`, `set_root`, `root`, `remove_root` (now
+  returns `Result<bool>`, because it starts a transaction), `roots`, and the
   pool accessors above.
 - `BTree`: `create`, `open`, `root`, `get`, `insert`, `delete`, `range`,
-  `check`. A tree is a small handle and every method takes `&mut Pager`, so
-  several trees can share one file. `range` is lazy, and inverted or empty
-  bounds yield nothing.
+  `check`, `pages`. A tree is a small handle and every method takes
+  `&mut Pager`, so several trees can share one file. `range` is lazy, and
+  inverted or empty bounds yield nothing. `pages` lists the tree's pages for
+  page accounting.
 - `StorageError`: `Io`, `FileTooShort`, `NotPageMultiple`, `BadMagic`,
   `UnsupportedVersion`, `Corrupt { page, reason }`, `PoolExhausted`,
   `PoolTooSmall`, `TooLarge`, `InvalidPage`, `DatabaseFull`,
-  `InvalidRootName`, `RootTableFull`.
+  `InvalidRootName`, `RootTableFull`, `Busy { reason }`, `NoTransaction`,
+  `TransactionOpen`, `InvalidSavepoint`, `Unusable`.
+- `Vfs` / `VfsFile`: the file layer every access goes through. `OsVfs` is
+  the real file system; `cairn_storage::fault::FaultVfs` is the in-memory,
+  fault-injecting test double.
 
-`sync` writes dirty pages and the header, then calls `File::sync_all`.
-Dropping a `Pager` syncs on a best-effort basis and ignores errors, so call
-`close` to see them.
+`sync` commits the open transaction, if any, and then checkpoints, so
+afterwards the main file alone holds the database. Dropping a `Pager` commits
+an implicit transaction, rolls back an explicit one (`begin`) and
+checkpoints, ignoring errors, so call `close` to see them.
 
-Not yet provided: a write-ahead log or crash atomicity (a crash before `sync`
-can leave a file that `open` rejects), file locking or concurrent access,
-overflow pages for larger keys or values, and page checksums.
+Not yet provided: file locking or access from several processes, overflow
+pages for larger keys or values, and checksums on main-file pages (log
+records are checksummed).
 
 ## SQL
 
@@ -319,24 +333,28 @@ step	depth	operation	detail
 ### API
 
 - `Database::create(path)` makes a new file (it fails if the file exists).
-  `Database::open(path)` opens an existing one, and `close` syncs it.
+  `Database::open(path)` opens an existing one, replaying its write-ahead
+  log, and `close` checkpoints it. `create_with` / `open_with` take a `Vfs`
+  and `Options`, for example the fault-injecting test double.
 - `execute(sql)` parses the whole input first, so a syntax error runs
   nothing. It then runs the statements in order, returns one `QueryResult` per
-  statement, and stops at the first error. Statements that already ran stay
-  applied. `execute_each(sql)` keeps going after an error and returns each
+  statement, and stops at the first error. Statements that already ran keep
+  their effect (committed, or pending inside an open transaction).
+  `execute_each(sql)` keeps going after an error and returns each
   statement's `Result`.
-- `QueryResult` is `Rows { columns, rows }` for `SELECT` and `EXPLAIN`, or
-  `Affected(n)`, which counts rows for `INSERT`, `UPDATE` and `DELETE` and is
-  0 for DDL. A `Value` is `Null`, `Integer(i64)`, `Real(f64)`, `Text(String)`
-  or `Boolean(bool)`.
+- `QueryResult` is `Rows { columns, rows }` for `SELECT`, `EXPLAIN` and
+  `PRAGMA`, or `Affected(n)`, which counts rows for `INSERT`, `UPDATE` and
+  `DELETE` and is 0 for DDL, `BEGIN`, `COMMIT` and `ROLLBACK`. A `Value` is
+  `Null`, `Integer(i64)`, `Real(f64)`, `Text(String)` or `Boolean(bool)`.
 - `ExecError` has a `kind()` (`Syntax`, `Storage`, `Corrupt`, `NotFound`,
   `AlreadyExists`, `Type`, `Constraint`, `Arithmetic`, `Unsupported`,
-  `TooLarge` or `Unusable`), a `message()`, and, when the error relates to SQL
-  text, a `span()` and `source_line()`. With a span, `Display` uses the same
-  three-line caret form as `SqlError`.
-- `check()` checks every table and index: B-tree structure, records, key
-  consistency, and that each index matches its table.
-- Changes are synced to disk at the end of each `execute` call.
+  `TooLarge`, `Unusable`, `Busy` or `Transaction`), a `message()`, and, when
+  the error relates to SQL text, a `span()` and `source_line()`. With a span,
+  `Display` uses the same three-line caret form as `SqlError`.
+- `check()` returns the first problem that `PRAGMA integrity_check` would
+  list (see [Transactions and durability](#transactions-and-durability)).
+- Statements outside `BEGIN` commit one by one (autocommit); see
+  [Transactions and durability](#transactions-and-durability).
 
 ### Types
 
@@ -424,10 +442,9 @@ select list.
 - Limits: an encoded row may be at most 1024 bytes and an index key at most
   256 bytes. Larger ones are `TooLarge` errors. Names are 1 to 64 bytes, and
   a table has at most 255 columns.
-- Until the write-ahead log arrives, a storage error in the middle of a write
-  can leave a statement half done. The `Database` then refuses further
-  statements (`Unusable`) until the file is reopened. `BEGIN`, `COMMIT` and
-  `ROLLBACK` are `Unsupported` errors for now.
+- A storage error in the middle of a write is undone with the rest of the
+  statement: the statement runs in its own transaction, or under a savepoint
+  inside `BEGIN`.
 - `DROP TABLE` deletes the table's and its indexes' B-trees and returns all
   of their pages to the free list for reuse.
 
@@ -489,6 +506,140 @@ To add a script, write the `.sql` file and its `.expected` file by hand from
 the rules above. `CAIRN_BLESS=1 cargo test -p cairn-exec --test golden`
 rewrites every `.expected` file from the actual output. Review those diffs
 against the rules before committing them.
+
+## Transactions and durability
+
+Every change to a database file goes through a write-ahead log stored beside
+it as `<file>-wal`. The log is created by the first commit and never deleted;
+checkpoints truncate it to zero bytes.
+
+### SQL transactions
+
+- `BEGIN` starts a transaction, and `COMMIT` or `ROLLBACK` ends it. All three
+  return `affected 0`. `ROLLBACK` discards every change since `BEGIN`,
+  catalog changes included: a table created inside the transaction is gone,
+  a dropped one is back, and the page count and free list are as before.
+- Outside `BEGIN`, every statement commits on its own (autocommit).
+- Inside `BEGIN`, a statement that fails is undone on its own, and the
+  transaction stays open with the earlier statements' changes.
+- `BEGIN` inside a transaction, and `COMMIT` or `ROLLBACK` without one, are
+  `Transaction` errors that change nothing.
+- Closing or dropping a `Database` with an open transaction discards it.
+- Handles on the same file in one process share its committed state. A
+  handle sees only committed changes from other handles, and each statement
+  outside a transaction sees one committed state for its whole run. One
+  handle at a time may write: `BEGIN`, or an autocommit write, on another
+  handle while a transaction is open fails at once with a `Busy` error.
+  There is no waiting and no read-only transaction, so callers retry.
+
+### Log format
+
+All integers are little-endian. The log starts with a 32-byte header:
+
+| Offset | Size | Field |
+|--------|------|-------|
+| 0      | 8    | magic `cairnwal` |
+| 8      | 4    | log format version, `u32` = 1 |
+| 12     | 4    | page size, `u32` = 4096 |
+| 16     | 8    | salt, `u64`; new for every log generation |
+| 24     | 4    | reserved, zero |
+| 28     | 4    | CRC of bytes 0..28 |
+
+A commit appends one page frame for every page the transaction changed, in
+ascending page order. Page 0 is included whenever the header (page count,
+free list or roots) changed. Then comes a commit record:
+
+| Offset | Size | Page frame (4128 bytes) | Commit record (32 bytes) |
+|--------|------|-------------------------|--------------------------|
+| 0      | 4    | type = 1                | type = 2 |
+| 4      | 4    | page id                 | page count after the commit |
+| 8      | 8    | transaction id          | transaction id |
+| 16     | 8    | salt                    | salt |
+| 24     | 4    | reserved, zero          | number of frames in the transaction |
+| 28     | 4    | CRC                     | CRC |
+| 32     | 4096 | full page image         | — |
+
+The CRC is CRC-32/ISO-HDLC (the zlib CRC, check value `0xCBF43926`). Each
+record's CRC continues from the previous record's CRC (the first from the
+header's) and covers the record's first 28 bytes and, for a frame, the page
+image. Transaction ids start at 1 after each truncation and increase by
+exactly 1. A new log generation takes the previous salt plus one. So a
+record left over from an older generation, or moved to another position,
+cannot validate.
+
+### Commit, checkpoint and recovery
+
+- **Commit.** A transaction's changed pages stay in its handle's memory until
+  commit. Commit writes the frames and the commit record, syncs the log, and
+  only then publishes the new state to other handles. Pages reach the main
+  file only through a checkpoint or recovery, and both sync the log before
+  their first main-file write. So a changed page never reaches the main file
+  before its commit record is durable.
+- **Checkpoint.** A checkpoint syncs the log, copies the latest committed
+  image of every logged page into the main file, sets the file length from
+  the committed page count, syncs the main file, then truncates the log and
+  syncs it. It runs:
+  - automatically after a commit that leaves more than 1000 frames in the
+    log (`Options::checkpoint_frames`);
+  - on every clean close;
+  - on `PRAGMA checkpoint`, which returns one row `ok` in column
+    `checkpoint`.
+
+  It is skipped, or for `PRAGMA checkpoint` refused with `Busy`, while
+  another statement is reading. Inside a transaction `PRAGMA checkpoint` is a
+  `Transaction` error.
+- **Recovery.** The first open of a file in a process scans the log. It
+  replays every complete transaction whose records all validate, in order,
+  by copying its pages into the main file as a checkpoint does, and stops at
+  the first incomplete, torn or corrupt record. Recovery is idempotent: it
+  empties the log only after the main file is synced, so a crash during
+  recovery is repaired by the next open.
+
+**Crash guarantee.** After a crash, reopening the database yields exactly
+the state after some committed transaction, never a partial one. That state
+includes every transaction whose `COMMIT` (or autocommit statement) returned
+`Ok`. A commit that returned an error may or may not be present: if the
+failure was the log sync itself, the file refuses further statements
+(`Unusable`) until every handle is closed and it is reopened.
+
+The crash tests (`crates/exec/tests/crash.rs`) check this guarantee.
+`cairn_storage::fault::FaultVfs` is an in-memory file layer that can:
+- stop after the Nth write or sync;
+- tear a write to a byte prefix;
+- rebuild the files either as a crashed process leaves them (all writes) or
+  as a power loss does (synced bytes only).
+
+A fixed-seed workload of 230 committed transactions crashes at every write
+and every sync. After each crash the test reopens the database and compares
+it with a model of the committed prefixes, then runs `check()` and
+`PRAGMA integrity_check`.
+
+### PRAGMA integrity_check
+
+`PRAGMA integrity_check` returns one row `ok` in column `integrity_check`, or
+one row per problem (at most 100, then `and N more problems`). It checks:
+- every catalog, table and index B-tree with `check()`;
+- that no page belongs to two trees;
+- record decoding, primary keys and row ids;
+- that every index has exactly one entry per row and unique indexes hold no
+  duplicates;
+- that no page is both on the free list and in use, and that no page is
+  neither (leaked).
+
+`Database::check()` returns the first such problem as a `Corrupt` error.
+`PRAGMA` is recognised before parsing, like `EXPLAIN`: `PRAGMA name` must be
+a whole statement, and an unknown name is an `Unsupported` error.
+
+### Limits
+
+- A transaction's changed pages are held in memory (4 KiB each) until
+  commit.
+- Only one process may use a file. There is no operating-system lock, and
+  two processes on one file will corrupt it.
+- `create` empties an orphan `<file>-wal`. Otherwise a log left beside a
+  file is assumed to belong to it.
+- A build from before the log (milestone 3) ignores a non-empty `-wal`; a
+  cleanly closed file has an empty one.
 
 ## Development
 

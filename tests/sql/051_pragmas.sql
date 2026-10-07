@@ -1,0 +1,11 @@
+CREATE TABLE p (id INTEGER PRIMARY KEY, s TEXT UNIQUE);
+INSERT INTO p VALUES (1, 'x'), (2, 'y');
+PRAGMA integrity_check;
+PRAGMA checkpoint;
+pragma INTEGRITY_CHECK;
+PRAGMA nope;
+EXPLAIN PRAGMA checkpoint;
+BEGIN;
+PRAGMA checkpoint;
+ROLLBACK;
+SELECT COUNT(*) AS n FROM p;

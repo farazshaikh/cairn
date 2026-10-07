@@ -24,12 +24,19 @@ pub enum ErrorKind {
     Constraint,
     /// Integer overflow, real overflow or division by zero.
     Arithmetic,
-    /// A statement this version does not run (BEGIN, non-SELECT EXPLAIN).
+    /// A statement this version does not run (non-SELECT EXPLAIN, an unknown
+    /// pragma).
     Unsupported,
     /// A row or index key exceeds the storage size limits.
     TooLarge,
-    /// A storage error interrupted a write; the database must be reopened.
+    /// The shared database file is poisoned after a failed sync; close every
+    /// handle and reopen it.
     Unusable,
+    /// Another handle holds the write lock, or readers block a checkpoint.
+    Busy,
+    /// BEGIN, COMMIT, ROLLBACK or a checkpoint used in the wrong transaction
+    /// state.
+    Transaction,
 }
 
 /// An execution error. When it relates to SQL text it carries the span and
@@ -73,14 +80,6 @@ impl ExecError {
         converted
     }
 
-    pub(crate) fn unusable() -> ExecError {
-        ExecError::new(
-            ErrorKind::Unusable,
-            "database is unusable after a storage error; reopen it",
-            None,
-        )
-    }
-
     pub(crate) fn corrupt(message: impl Into<String>) -> ExecError {
         ExecError::new(ErrorKind::Corrupt, message, None)
     }
@@ -118,6 +117,11 @@ impl From<StorageError> for ExecError {
             | StorageError::FileTooShort { .. }
             | StorageError::NotPageMultiple { .. }
             | StorageError::UnsupportedVersion { .. } => ErrorKind::Corrupt,
+            StorageError::Busy { .. } => ErrorKind::Busy,
+            StorageError::NoTransaction
+            | StorageError::TransactionOpen
+            | StorageError::InvalidSavepoint => ErrorKind::Transaction,
+            StorageError::Unusable => ErrorKind::Unusable,
             _ => ErrorKind::Storage,
         };
         ExecError(Box::new(Inner {
@@ -194,12 +198,23 @@ mod tests {
 
     #[test]
     fn display_without_span_is_the_message() {
-        let error = ExecError::unusable();
-        assert_eq!(
-            error.to_string(),
-            "database is unusable after a storage error; reopen it"
-        );
+        let error = ExecError::corrupt("bad page");
+        assert_eq!(error.to_string(), "bad page");
         assert!(std::error::Error::source(&error).is_none());
+    }
+
+    #[test]
+    fn transaction_storage_errors_get_their_own_kinds() {
+        let busy = ExecError::from(StorageError::Busy { reason: "x" });
+        assert_eq!(busy.kind(), ErrorKind::Busy);
+        assert_eq!(
+            ExecError::from(StorageError::NoTransaction).kind(),
+            ErrorKind::Transaction
+        );
+        assert_eq!(
+            ExecError::from(StorageError::Unusable).kind(),
+            ErrorKind::Unusable
+        );
     }
 
     #[test]

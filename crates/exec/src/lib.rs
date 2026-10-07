@@ -6,7 +6,11 @@
 //! full-scan access path; and the executor (`plan.rs`, `dml.rs`, `ddl.rs`)
 //! reads and writes `cairn-storage` B-trees. Every write statement
 //! validates its whole effect before the first write, so a failing
-//! statement changes nothing.
+//! statement normally changes nothing; any write it did make is undone by
+//! the storage transaction (autocommit) or savepoint (inside BEGIN) that
+//! wraps it. `BEGIN`, `COMMIT` and `ROLLBACK` group statements into
+//! transactions, and `PRAGMA checkpoint` and `PRAGMA integrity_check` are
+//! recognised before parsing (`prepass.rs`).
 //!
 //! On-disk formats are documented where they are encoded:
 //! `codec/record.rs` (row records, version 1), `codec/key.rs` (row and
@@ -33,8 +37,10 @@ mod error;
 mod eval;
 mod explain;
 mod functions;
+mod integrity;
 mod like;
 mod plan;
+mod prepass;
 mod select;
 mod table;
 mod value;

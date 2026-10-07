@@ -3,8 +3,8 @@
 //!
 //! Write statements first build a complete [`WriteSet`] while validating;
 //! only [`apply`] touches the pager. A storage error during apply can leave
-//! trees half-written (the storage layer is not atomic before the
-//! write-ahead log), so the caller marks the database unusable.
+//! trees half-written in the transaction overlay; the caller rolls the
+//! statement's savepoint or transaction back, so nothing reaches the log.
 
 use std::collections::BTreeSet;
 use std::ops::Bound;

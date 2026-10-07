@@ -1,0 +1,25 @@
+affected 0
+
+affected 2
+
+integrity_check
+ok
+
+checkpoint
+ok
+
+integrity_check
+ok
+
+error: line 6, column 8: unknown pragma: nope
+
+error: line 7, column 1: EXPLAIN supports only SELECT
+
+affected 0
+
+error: line 9, column 1: cannot checkpoint inside a transaction
+
+affected 0
+
+n
+2

@@ -2,6 +2,10 @@
 //! across close and reopen, B-tree roots that move, page reuse after DROP
 //! TABLE, statement atomicity compared on full table dumps, and errors.
 
+mod common;
+
+use common::remove_database;
+
 use std::fs;
 use std::path::PathBuf;
 
@@ -14,7 +18,7 @@ impl TempDb {
     fn new(name: &str) -> TempDb {
         let path =
             std::env::temp_dir().join(format!("cairn-exec-{}-{name}.db", std::process::id()));
-        let _ = fs::remove_file(&path);
+        remove_database(&path);
         TempDb(path)
     }
 
@@ -29,7 +33,7 @@ impl TempDb {
 
 impl Drop for TempDb {
     fn drop(&mut self) {
-        let _ = fs::remove_file(&self.0);
+        remove_database(&self.0);
     }
 }
 

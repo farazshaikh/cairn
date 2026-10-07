@@ -11,8 +11,10 @@
 //! otherwise the cells are redistributed evenly between the two. The
 //! resulting fill bounds are described in the node layout documentation.
 //!
-//! Operations are not atomic: an I/O error part-way through can leave the
-//! tree inconsistent, which `check` will report.
+//! Operations are not atomic on their own: an error part-way through can
+//! leave the tree inconsistent in the pager's transaction overlay, which
+//! `check` will report. Callers undo that with `Pager::rollback` or
+//! `Pager::rollback_to`, so a half-done operation never reaches the file.
 
 use std::collections::HashSet;
 use std::ops::Bound;
@@ -162,6 +164,46 @@ impl BTree {
         };
         checker.visit(self.root, None, None, 0)?;
         checker.check_leaf_chain()
+    }
+
+    /// Every page of the tree, root first (pre-order). A page that does not
+    /// decode as a node is listed but not descended into (`check` reports
+    /// it), so page accounting still knows who references it. Fails with
+    /// `Corrupt` on a page outside the file, a page reached twice or a path
+    /// deeper than 64 levels, so a corrupt tree cannot loop.
+    pub fn pages(&self, pager: &mut Pager) -> Result<Vec<PageId>> {
+        let mut seen = HashSet::new();
+        let mut pages = Vec::new();
+        let mut stack = vec![(self.root, 0usize)];
+        while let Some((id, depth)) = stack.pop() {
+            if id.0 == 0 || id.0 >= pager.page_count() {
+                return Err(StorageError::Corrupt {
+                    page: id,
+                    reason: "tree page outside the file",
+                });
+            }
+            if depth > MAX_DEPTH {
+                return Err(too_deep(id));
+            }
+            if !seen.insert(id) {
+                return Err(StorageError::Corrupt {
+                    page: id,
+                    reason: "tree page reachable more than once",
+                });
+            }
+            pages.push(id);
+            let node = match load(pager, id) {
+                Ok(node) => node,
+                Err(StorageError::Corrupt { .. }) => continue,
+                Err(e) => return Err(e),
+            };
+            if let Node::Internal(node) = node {
+                for index in (0..=node.cells.len()).rev() {
+                    stack.push((node.child(index, id)?, depth + 1));
+                }
+            }
+        }
+        Ok(pages)
     }
 
     fn fix_root(&mut self, pager: &mut Pager, outcome: Outcome) -> Result<()> {
@@ -781,6 +823,24 @@ mod tests {
     fn fixture_is_valid() {
         let mut f = fixture();
         assert_eq!(f.tree.check(&mut f.pager), Ok(()));
+    }
+
+    #[test]
+    fn pages_lists_every_tree_page_and_survives_undecodable_leaves() {
+        let mut f = fixture();
+        let root = f.tree.root();
+        assert_eq!(
+            f.tree.pages(&mut f.pager).expect("pages"),
+            vec![root, f.left, f.right]
+        );
+        f.pager.free(f.right).expect("free a live leaf");
+        assert_eq!(
+            f.tree.pages(&mut f.pager).expect("pages"),
+            vec![root, f.left, f.right],
+            "a freed leaf is still listed as referenced"
+        );
+        let single = BTree::open(f.left);
+        assert_eq!(single.pages(&mut f.pager).expect("pages"), vec![f.left]);
     }
 
     #[test]

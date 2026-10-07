@@ -1,82 +1,18 @@
-//! `EXPLAIN <select>` without parser support.
-//!
-//! `cairn-sql` has no EXPLAIN statement, so [`preprocess`] finds an
-//! unquoted `explain` word at the start of a statement and replaces its
-//! bytes with spaces before parsing. The text keeps its length and line
-//! breaks, so every span still points into the original input.
+//! `EXPLAIN <select>` output. The `explain` marker itself is found by the
+//! pre-pass in `prepass.rs`.
 //!
 //! [`render`] prints a plan as rows with columns `step` (0-based pre-order
 //! index), `depth` (root is 0), `operation` and `detail`.
 
 use std::ops::Bound;
 
-use cairn_sql::{Name, Span, SqlError, Statement, TokenKind, tokenize};
+use cairn_sql::Name;
 
 use crate::database::QueryResult;
-use crate::error::{ErrorKind, ExecError};
 use crate::plan::{Access, Plan, TableAccess};
 use crate::value::Value;
 
 pub const COLUMNS: [&str; 4] = ["step", "depth", "operation", "detail"];
-
-/// The input with EXPLAIN markers blanked, and the markers' spans.
-pub struct Preprocessed {
-    pub text: String,
-    pub markers: Vec<Span>,
-}
-
-impl Preprocessed {
-    /// The EXPLAIN marker in front of each statement, if any. A marker that
-    /// no statement follows (`SELECT 1; EXPLAIN`) is a syntax error rather
-    /// than being dropped silently.
-    pub fn assign(&self, statements: &[Statement]) -> Result<Vec<Option<Span>>, ExecError> {
-        let mut assigned = Vec::with_capacity(statements.len());
-        let mut previous_end = 0;
-        for statement in statements {
-            assigned.push(self.marker_before(previous_end, statement.span.start));
-            previous_end = statement.span.end;
-        }
-        match self.markers.iter().find(|m| m.start >= previous_end) {
-            Some(dangling) => Err(ExecError::at(
-                ErrorKind::Syntax,
-                "expected SELECT after EXPLAIN",
-                *dangling,
-            )),
-            None => Ok(assigned),
-        }
-    }
-
-    /// The marker in front of a statement starting at `start`, if any,
-    /// after the previous statement ended at `previous_end`.
-    fn marker_before(&self, previous_end: usize, start: usize) -> Option<Span> {
-        self.markers
-            .iter()
-            .copied()
-            .find(|m| m.start >= previous_end && m.start < start)
-    }
-}
-
-pub fn preprocess(sql: &str) -> Result<Preprocessed, SqlError> {
-    let tokens = tokenize(sql)?;
-    let mut text = sql.to_string();
-    let mut markers = Vec::new();
-    let mut at_start = true;
-    for token in tokens {
-        let is_marker = at_start
-            && matches!(&token.kind, TokenKind::Ident(word) if word == "explain")
-            && sql
-                .get(token.span.start..token.span.end)
-                .is_some_and(|source| source.eq_ignore_ascii_case("explain"));
-        if is_marker {
-            let blank = " ".repeat(token.span.end - token.span.start);
-            text.replace_range(token.span.start..token.span.end, &blank);
-            markers.push(token.span);
-            continue;
-        }
-        at_start = token.kind == TokenKind::Semicolon;
-    }
-    Ok(Preprocessed { text, markers })
-}
 
 pub fn render(plan: &Plan) -> QueryResult {
     let mut rows = Vec::new();
@@ -203,26 +139,4 @@ fn range_text(column: &str, low: &Bound<Value>, high: &Bound<Value>) -> String {
         Bound::Unbounded => {}
     }
     parts.join(" AND ")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn markers_are_blanked_only_at_statement_start() {
-        let sql = "EXPLAIN SELECT 1; explain select explain FROM \"explain\";\nExplain\tSELECT 2";
-        let pre = preprocess(sql).expect("tokenize");
-        assert_eq!(pre.markers.len(), 3);
-        assert_eq!(pre.text.len(), sql.len());
-        assert!(pre.text.starts_with("        SELECT 1;"));
-        assert!(pre.text.contains("select explain FROM \"explain\""));
-        assert_eq!(pre.markers.get(2).map(|m| m.line), Some(2));
-    }
-
-    #[test]
-    fn quoted_explain_is_not_a_marker() {
-        let pre = preprocess("\"explain\"").expect("tokenize");
-        assert!(pre.markers.is_empty());
-    }
 }

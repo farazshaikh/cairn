@@ -1,5 +1,6 @@
-//! Buffer pool behaviour: bounded capacity, LRU eviction, dirty write-back,
-//! pinning and `PoolExhausted` (milestone AC3, AC7).
+//! Buffer pool behaviour: bounded capacity, LRU eviction, no write-back of
+//! uncommitted pages, pinning and `PoolExhausted` (milestone AC3, AC7; M4
+//! AC1).
 
 mod common;
 
@@ -82,20 +83,26 @@ fn lru_evicts_least_recently_used() -> TestResult {
     pager.close()
 }
 
+/// M4 replaced write-back on eviction: a changed page lives in the
+/// transaction overlay, so eviction pressure never puts it in the main file
+/// before commit and checkpoint.
 #[test]
-fn dirty_page_written_back_on_eviction() -> TestResult {
+fn dirty_page_never_reaches_the_file_before_commit() -> TestResult {
     let tmp = TempPath::new("writeback");
     let mut pager = setup(&tmp, 9)?;
+    let before = read_raw(tmp.path());
     pager.write(PageId(1), &filled(0xEE))?;
     read_ids(&mut pager, 2..=9)?;
-    assert!(!pager.is_cached(PageId(1)));
-    assert_eq!(pager.stats().page_writes, 1);
-    let raw = read_raw(tmp.path());
-    assert!(
-        raw[PAGE_SIZE..2 * PAGE_SIZE].iter().all(|&b| b == 0xEE),
-        "evicted dirty page reached the file before any sync"
+    assert_eq!(pager.stats().page_writes, 0);
+    assert_eq!(
+        read_raw(tmp.path()),
+        before,
+        "an uncommitted page reached the main file"
     );
     assert_eq!(pager.read(PageId(1))?, filled(0xEE));
+    pager.sync()?;
+    let raw = read_raw(tmp.path());
+    assert!(raw[PAGE_SIZE..2 * PAGE_SIZE].iter().all(|&b| b == 0xEE));
     pager.close()
 }
 
@@ -152,11 +159,14 @@ fn all_pinned_returns_pool_exhausted() -> TestResult {
     let page_count = pager.page_count();
     let exhausted = |r: Result<(), StorageError>| matches!(r, Err(StorageError::PoolExhausted));
     assert!(exhausted(pager.read(PageId(9)).map(|_| ())));
-    assert!(exhausted(pager.write(PageId(9), &filled(1))));
-    assert!(exhausted(pager.allocate().map(|_| ())));
     assert!(exhausted(pager.free(PageId(9))));
     assert_eq!(pager.resident(), 8);
     assert_eq!(pager.page_count(), page_count);
+    // Since M4, writes and growth go to the transaction overlay and need no
+    // frame, so they succeed with every frame pinned.
+    pager.write(PageId(9), &filled(9))?;
+    assert_eq!(pager.allocate()?, PageId(page_count));
+    pager.rollback()?;
     read_ids(&mut pager, 1..=8)?;
 
     pager.unpin(PageId(4))?;

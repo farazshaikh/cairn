@@ -40,6 +40,9 @@ impl TempPath {
 impl Drop for TempPath {
     fn drop(&mut self) {
         let _ = std::fs::remove_file(&self.path);
+        let mut wal = self.path.as_os_str().to_owned();
+        wal.push("-wal");
+        let _ = std::fs::remove_file(PathBuf::from(wal));
     }
 }
 

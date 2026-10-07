@@ -7,6 +7,8 @@ use cairn_exec::Database;
 
 mod common;
 
+use common::remove_database;
+
 /// The body of the first fenced block with `language` after `heading`.
 fn block_after<'a>(readme: &'a str, heading: &str, language: &str) -> &'a str {
     let section = &readme[readme.find(heading).expect("heading")..];
@@ -23,7 +25,7 @@ fn readme_querying_example_produces_the_documented_output() {
     let sql = block_after(&readme, "## Querying", "sql");
     let expected = block_after(&readme, "## Querying", "text");
     let path = std::env::temp_dir().join(format!("cairn-readme-{}.db", std::process::id()));
-    let _ = fs::remove_file(&path);
+    remove_database(&path);
     let mut db = Database::create(&path).expect("create");
     let outcome = db
         .execute(sql)
@@ -31,6 +33,6 @@ fn readme_querying_example_produces_the_documented_output() {
     let actual = common::render(&outcome);
     db.check().expect("check");
     db.close().expect("close");
-    let _ = fs::remove_file(&path);
+    remove_database(&path);
     assert_eq!(actual, expected);
 }

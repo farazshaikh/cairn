@@ -230,8 +230,8 @@ fn roots_limit_seventeenth_is_root_table_full() -> TestResult {
     ));
     pager.set_root("r3", id)?;
     assert_eq!(pager.roots().len(), 16);
-    assert!(pager.remove_root("r3"));
-    assert!(!pager.remove_root("r3"));
+    assert!(pager.remove_root("r3")?);
+    assert!(!pager.remove_root("r3")?);
     assert_eq!(pager.root("r3"), None);
     pager.set_root("r16", id)?;
     assert_eq!(pager.roots().len(), 16);

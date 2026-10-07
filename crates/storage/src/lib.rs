@@ -14,9 +14,16 @@
 //! - `pager.rs`: free pages, which form a LIFO list through their own bytes;
 //! - `node.rs`: B-tree leaf and internal nodes, size limits and fill bounds.
 //!
-//! [`Pager`] owns the file, the header and a bounded LRU buffer pool.
-//! [`BTree`] is a handle to a tree rooted at a page; its methods borrow the
-//! pager.
+//! [`Pager`] owns a handle on the file: its transaction overlay and a
+//! bounded LRU buffer pool of committed pages, over state shared by every
+//! handle on the same file in the process. Every change goes through the
+//! write-ahead log `<file>-wal` (format in `wal.rs`); see `pager.rs` for the
+//! transaction, checkpoint and recovery rules. [`BTree`] is a handle to a
+//! tree rooted at a page; its methods borrow the pager.
+//!
+//! All file access goes through the [`Vfs`] trait. [`OsVfs`] is the real
+//! file system; [`fault::FaultVfs`] is an in-memory double that injects
+//! crashes for tests.
 
 #![cfg_attr(
     not(test),
@@ -29,12 +36,17 @@
 )]
 
 mod btree;
+mod crc;
 mod error;
+pub mod fault;
 mod header;
 mod node;
 mod page;
 mod pager;
 mod pool;
+mod shared;
+mod vfs;
+mod wal;
 
 #[cfg(test)]
 #[path = "../tests/common/mod.rs"]
@@ -45,5 +57,6 @@ pub use error::{Result, SizeKind, StorageError};
 pub use header::{FORMAT_VERSION, MAGIC, MAX_ROOT_NAME_LEN, MAX_ROOTS};
 pub use node::{MAX_KEY_LEN, MAX_VALUE_LEN};
 pub use page::{PAGE_SIZE, Page, PageId};
-pub use pager::Pager;
+pub use pager::{DEFAULT_CHECKPOINT_FRAMES, Options, Pager, Savepoint};
 pub use pool::{DEFAULT_POOL_PAGES, MIN_POOL_PAGES, PoolStats};
+pub use vfs::{OsVfs, Vfs, VfsFile};

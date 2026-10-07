@@ -30,6 +30,8 @@
 //! | AC5 query semantics | 016-038 |
 //! | AC6 planner, EXPLAIN | 013, 039-042, 045, 048 (`planner.rs`) |
 //! | AC7 UPDATE, DELETE, DROP | 003, 043-047 (`database.rs`: page reuse) |
+//! | M4 AC2 BEGIN, COMMIT, ROLLBACK | 049 (`transactions.rs`) |
+//! | M4 AC4, AC7 PRAGMA checkpoint, integrity_check | 051 (`pragmas.rs`) |
 
 use std::fmt::Write as _;
 use std::fs;
@@ -39,7 +41,7 @@ use cairn_exec::Database;
 
 mod common;
 
-use common::render;
+use common::{remove_database, render};
 
 const MIN_SCRIPTS: usize = 40;
 
@@ -48,14 +50,14 @@ struct TempFile(PathBuf);
 
 impl Drop for TempFile {
     fn drop(&mut self) {
-        let _ = fs::remove_file(&self.0);
+        remove_database(&self.0);
     }
 }
 
 fn run_script(path: &Path, stem: &str) -> String {
     let db_path =
         std::env::temp_dir().join(format!("cairn-golden-{}-{stem}.db", std::process::id()));
-    let _ = fs::remove_file(&db_path);
+    remove_database(&db_path);
     let _guard = TempFile(db_path.clone());
     let sql = fs::read_to_string(path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
     let mut db = Database::create(&db_path).unwrap_or_else(|e| panic!("create database: {e}"));

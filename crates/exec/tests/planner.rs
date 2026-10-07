@@ -2,7 +2,10 @@
 //! shape, and equivalence of indexed plans with full scans over generated
 //! predicates.
 
-use std::fs;
+mod common;
+
+use common::remove_database;
+
 use std::path::PathBuf;
 
 use cairn_exec::{Database, QueryResult, Value};
@@ -13,7 +16,7 @@ impl TempDb {
     fn new(name: &str) -> TempDb {
         let path =
             std::env::temp_dir().join(format!("cairn-planner-{}-{name}.db", std::process::id()));
-        let _ = fs::remove_file(&path);
+        remove_database(&path);
         let db = Database::create(&path).expect("create");
         TempDb(path, db)
     }
@@ -21,7 +24,7 @@ impl TempDb {
 
 impl Drop for TempDb {
     fn drop(&mut self) {
-        let _ = fs::remove_file(&self.0);
+        remove_database(&self.0);
     }
 }
 
