@@ -236,25 +236,29 @@ impl Pager {
         self.txn.as_mut().ok_or(StorageError::NoTransaction)
     }
 
-    /// Makes the open transaction durable and visible to every handle. An
-    /// empty transaction only releases the write lock. On a write error the
-    /// transaction is rolled back; on a log sync error the file becomes
-    /// unusable (the transaction may or may not survive a reopen).
-    pub fn commit(&mut self) -> Result<()> {
+    /// Makes the open transaction durable and visible to every handle, and
+    /// returns the sequence number of the committed state it produced. An
+    /// empty transaction only releases the write lock and returns the state
+    /// it started from. Callers that cache derived state (such as a catalog)
+    /// must record this value rather than `snapshot_seq()`, because another
+    /// handle may commit as soon as the write lock is released. On a write
+    /// error the transaction is rolled back; on a log sync error the file
+    /// becomes unusable (the transaction may or may not survive a reopen).
+    pub fn commit(&mut self) -> Result<u64> {
         let txn = self.txn.take().ok_or(StorageError::NoTransaction)?;
         let result = self.commit_txn(txn);
         self.shared.lock_any().writer = None;
         result
     }
 
-    fn commit_txn(&mut self, txn: Txn) -> Result<()> {
+    fn commit_txn(&mut self, txn: Txn) -> Result<u64> {
         let mut pages: Vec<(PageId, Page)> = Vec::with_capacity(txn.overlay.len() + 1);
         if txn.header != txn.base_header {
             pages.push((PageId(0), txn.header.encode()?));
         }
         pages.extend(txn.overlay);
         if pages.is_empty() {
-            return Ok(());
+            return Ok(txn.base_seq);
         }
         let mut state = self.shared.lock()?;
         let commit = Commit {
@@ -277,7 +281,7 @@ impl Pager {
                 self.count_checkpoint(copied);
             }
         }
-        Ok(())
+        Ok(seq)
     }
 
     /// Discards the open transaction and releases the write lock.

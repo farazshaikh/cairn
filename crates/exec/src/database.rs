@@ -245,12 +245,19 @@ impl Database {
         Ok(QueryResult::Affected(0))
     }
 
-    /// Commits the pager's transaction. On failure it was rolled back, so
-    /// the catalog may hold changes that never committed.
+    /// Commits the pager's transaction and records the committed state the
+    /// catalog now describes. That is the sequence number this commit
+    /// produced, not the latest one: once the write lock is released another
+    /// handle may already have committed, possibly DDL that this catalog
+    /// does not contain. On failure the transaction was rolled back, so the
+    /// catalog may hold changes that never committed.
     fn finish_commit(&mut self) -> Result<(), ExecError> {
-        match self.pager.commit() {
-            Ok(()) => {
-                self.catalog_seq = self.pager.snapshot_seq();
+        let committed = self.pager.commit();
+        #[cfg(test)]
+        tests::run_after_commit_hook();
+        match committed {
+            Ok(seq) => {
+                self.catalog_seq = seq;
                 Ok(())
             }
             Err(error) => {
@@ -394,5 +401,66 @@ fn single_column(name: &str, values: Vec<String>) -> QueryResult {
     QueryResult::Rows {
         columns: vec![name.to_string()],
         rows: values.into_iter().map(|v| vec![Value::Text(v)]).collect(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::RefCell;
+    use std::path::Path;
+    use std::sync::Arc;
+
+    use cairn_storage::Options;
+    use cairn_storage::fault::FaultVfs;
+
+    use super::{Database, QueryResult};
+    use crate::value::Value;
+
+    type Hook = Box<dyn FnOnce()>;
+
+    thread_local! {
+        /// Runs once, on this thread, between `Pager::commit` returning and
+        /// `Database` recording the committed sequence number: the window in
+        /// which another handle can commit.
+        static AFTER_COMMIT: RefCell<Option<Hook>> = const { RefCell::new(None) };
+    }
+
+    pub(super) fn run_after_commit_hook() {
+        if let Some(hook) = AFTER_COMMIT.with(|slot| slot.borrow_mut().take()) {
+            hook();
+        }
+    }
+
+    /// Regression for review finding m4-review-catalog-seq-race: handle B
+    /// commits DDL right after handle A's commit releases the write lock and
+    /// before A records its catalog sequence. A must still see B's table.
+    #[test]
+    fn ddl_committed_right_after_our_commit_is_not_missed() {
+        let vfs = FaultVfs::new();
+        let path = Path::new("/race.db");
+        let options = Options::new(64, 1000);
+        let mut a = Database::create_with(Arc::new(vfs.clone()), path, options).expect("create");
+        a.execute("CREATE TABLE a (x INTEGER)").expect("create a");
+        let mut b = Database::open_with(Arc::new(vfs), path, options).expect("open b");
+        AFTER_COMMIT.with(|slot| {
+            *slot.borrow_mut() = Some(Box::new(move || {
+                b.execute("CREATE TABLE b (x INTEGER); INSERT INTO b VALUES (7)")
+                    .expect("b commits in the window");
+            }));
+        });
+        a.execute("INSERT INTO a VALUES (1)").expect("a commits");
+        assert!(
+            AFTER_COMMIT.with(|slot| slot.borrow().is_none()),
+            "the hook ran"
+        );
+        let result = a.execute("SELECT x FROM b").expect("a sees b's table");
+        assert_eq!(
+            result,
+            vec![QueryResult::Rows {
+                columns: vec!["x".into()],
+                rows: vec![vec![Value::Integer(7)]],
+            }]
+        );
+        a.check().expect("check");
     }
 }

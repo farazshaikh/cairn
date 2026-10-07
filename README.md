@@ -127,7 +127,10 @@ pager.close()?;                         // sync and report errors
   `end_read`, `snapshot_seq`, `checkpoint`, `log_frames`, `sync`, `close`,
   `pin`, `unpin`, `free_list`, `set_root`, `root`, `remove_root` (now
   returns `Result<bool>`, because it starts a transaction), `roots`, and the
-  pool accessors above.
+  pool accessors above. `commit` returns the sequence number of the state it
+  committed; `snapshot_seq` returns the latest one, which another handle may
+  already have moved past, so state cached per commit (like the exec
+  catalog) must use the value `commit` returned.
 - `BTree`: `create`, `open`, `root`, `get`, `insert`, `delete`, `range`,
   `check`, `pages`. A tree is a small handle and every method takes
   `&mut Pager`, so several trees can share one file. `range` is lazy, and

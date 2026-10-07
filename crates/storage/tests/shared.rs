@@ -69,6 +69,35 @@ fn uncommitted_changes_are_invisible_to_other_handles() -> TestResult {
 }
 
 #[test]
+fn commit_returns_the_sequence_it_published_not_the_latest() -> TestResult {
+    let (_vfs, mut a, mut b) = pair()?;
+    let start = a.snapshot_seq();
+    a.begin()?;
+    assert_eq!(
+        a.commit()?,
+        start,
+        "an empty commit reports the state it began from"
+    );
+    a.write(PageId(1), &filled(0x51))?;
+    let mine = a.commit()?;
+    assert_eq!(mine, start + 1);
+    b.write(PageId(2), &filled(0x52))?;
+    let theirs = b.commit()?;
+    assert_eq!(theirs, mine + 1);
+    assert_eq!(
+        a.commit().err().map(|e| e.to_string()),
+        Some("no transaction is open".into())
+    );
+    assert_eq!(
+        a.snapshot_seq(),
+        theirs,
+        "snapshot_seq is the latest state, not a's commit"
+    );
+    a.close()?;
+    b.close()
+}
+
+#[test]
 fn one_writer_at_a_time() -> TestResult {
     let (_vfs, mut a, mut b) = pair()?;
     a.begin()?;
