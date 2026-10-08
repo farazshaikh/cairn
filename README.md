@@ -1,6 +1,6 @@
 # cairn
 
-[![Made using Factory ❤](https://img.shields.io/badge/Made%20using-Factory%20%E2%9D%A4-e5326f?style=for-the-badge)](https://farazshaikh.github.io/factory-dist/)
+![Made using Factory ❤](https://img.shields.io/badge/Made%20using-Factory%20%E2%9D%A4-e5326f?style=for-the-badge)
 
 An embedded SQL database written in Rust using only the standard library.
 
@@ -10,7 +10,7 @@ for defining and querying tables. The `cairn` shell opens a database file and
 runs SQL interactively or from a script.
 
 cairn was planned, designed, implemented, fuzzed and reviewed by an autonomous
-agent team running in [Factory](https://farazshaikh.github.io/factory-dist/), with
+agent team running in Factory, with
 a human operator answering its open questions. The agent definitions are in
 [`.github/agents`](.github/agents).
 
