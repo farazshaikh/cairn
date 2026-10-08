@@ -14,8 +14,8 @@
 //!   either succeed or fail with a `Corrupt` or `Storage` error. Pages have
 //!   no checksums, so damage can leave a valid catalog that names a table
 //!   or column differently (a bit flip turns `person` into `persof`). A
-//!   query that then fails with `NotFound` passes only if the schema the
-//!   damaged file reports differs from the undamaged schema.
+//!   query that then fails with `NotFound` passes only if a table or column
+//!   it names is absent from the schema the damaged file reports.
 //!
 //! A sample of cases repeats the same bytes through real files.
 
@@ -42,14 +42,30 @@ const WAL: &str = "/fuzz.db-wal";
 /// Every 15th case also runs through real files.
 const REAL_FILE_EVERY: u32 = 15;
 
-const QUERIES: [&str; 7] = [
-    "SELECT COUNT(*) FROM people",
-    "SELECT * FROM people",
-    "SELECT name FROM people WHERE id = 17",
-    "SELECT COUNT(*) FROM orders WHERE person = 3",
-    "SELECT p.name, SUM(o.amount) FROM people AS p JOIN orders AS o ON o.person = p.id GROUP BY p.name",
-    "SELECT * FROM tags ORDER BY tag",
-    "PRAGMA integrity_check",
+/// The fixed queries, each with the tables and columns it names. A column
+/// of `""` means the query names only the table.
+const QUERIES: [(&str, &[(&str, &str)]); 7] = [
+    ("SELECT COUNT(*) FROM people", &[("people", "")]),
+    ("SELECT * FROM people", &[("people", "")]),
+    (
+        "SELECT name FROM people WHERE id = 17",
+        &[("people", "name"), ("people", "id")],
+    ),
+    (
+        "SELECT COUNT(*) FROM orders WHERE person = 3",
+        &[("orders", "person")],
+    ),
+    (
+        "SELECT p.name, SUM(o.amount) FROM people AS p JOIN orders AS o ON o.person = p.id GROUP BY p.name",
+        &[
+            ("people", "name"),
+            ("people", "id"),
+            ("orders", "amount"),
+            ("orders", "person"),
+        ],
+    ),
+    ("SELECT * FROM tags ORDER BY tag", &[("tags", "tag")]),
+    ("PRAGMA integrity_check", &[]),
 ];
 
 struct Images {
@@ -115,9 +131,20 @@ fn undamaged_schema() -> &'static [TableSchema] {
     })
 }
 
+/// Whether one of `names` is absent from `schema`: a table, or a column of
+/// a present table.
+fn names_missing(schema: &[TableSchema], names: &[(&str, &str)]) -> bool {
+    names.iter().any(
+        |(table, column)| match schema.iter().find(|t| t.name == *table) {
+            None => true,
+            Some(t) => !column.is_empty() && !t.columns.iter().any(|c| c.name == *column),
+        },
+    )
+}
+
 /// A query's outcome must be a result, a `Corrupt` or `Storage` error, or
-/// `NotFound` when the damage renamed or removed a catalog name.
-fn query_ok(db: &mut Database, sql: &str) -> Result<(), String> {
+/// `NotFound` when the damage renamed or removed a name the query uses.
+fn query_ok(db: &mut Database, sql: &str, names: &[(&str, &str)]) -> Result<(), String> {
     let error = match db.execute(sql) {
         Ok(_) => return Ok(()),
         Err(e) => e,
@@ -125,9 +152,9 @@ fn query_ok(db: &mut Database, sql: &str) -> Result<(), String> {
     match error.kind() {
         ErrorKind::Corrupt | ErrorKind::Storage => Ok(()),
         ErrorKind::NotFound => match db.schema() {
-            Ok(schema) if schema.as_slice() != undamaged_schema() => Ok(()),
+            Ok(schema) if names_missing(&schema, names) => Ok(()),
             Ok(_) => Err(format!(
-                "{sql}: NotFound with the undamaged schema: {error}"
+                "{sql}: NotFound although every name it uses exists: {error}"
             )),
             Err(e) => typed(Err(e), &[ErrorKind::Corrupt, ErrorKind::Storage], "schema"),
         },
@@ -167,8 +194,8 @@ fn exercise(
         &[ErrorKind::Corrupt, ErrorKind::Storage],
         "check",
     )?;
-    for sql in QUERIES {
-        query_ok(&mut db, sql)?;
+    for (sql, names) in QUERIES {
+        query_ok(&mut db, sql, names)?;
     }
     typed(
         db.close(),
@@ -265,6 +292,18 @@ fn damaged_files_fail_cleanly() {
 }
 
 #[test]
+fn names_missing_finds_only_absent_names() {
+    let schema = undamaged_schema();
+    assert!(!names_missing(
+        schema,
+        &[("orders", "person"), ("tags", "")]
+    ));
+    assert!(names_missing(schema, &[("orders", "persof")]));
+    assert!(names_missing(schema, &[("nosuch", "")]));
+    assert!(!names_missing(schema, &[]));
+}
+
+#[test]
 fn the_undamaged_images_open_and_pass_every_query() {
     for (db_bytes, wal_bytes) in [&images().closed, &images().logged] {
         let vfs = Arc::new(FaultVfs::new());
@@ -274,7 +313,8 @@ fn the_undamaged_images_open_and_pass_every_query() {
         }
         let mut db = Database::open_with(vfs, Path::new(DB), Options::default()).expect("open");
         db.check().expect("check");
-        for sql in QUERIES {
+        for (sql, names) in QUERIES {
+            assert!(!names_missing(undamaged_schema(), names), "{sql}");
             db.execute(sql).unwrap_or_else(|e| panic!("{sql}: {e}"));
         }
         db.close().expect("close");

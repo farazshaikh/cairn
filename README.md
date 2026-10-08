@@ -883,8 +883,8 @@ and with an empty log it must leave the database file unchanged.
 `Storage`, with one exception. Pages carry no checksums, so damage can
 leave a well-formed catalog that names a table or column differently (a
 bit flip turns `person` into `persof`), which no check can tell from a
-real name. A query that then fails with `NotFound` passes only if the
-damaged file's `schema()` differs from the undamaged one.
+real name. A query that then fails with `NotFound` passes only if a table
+or column it names is missing from the damaged file's `schema()`.
 
 ## Benchmarks
 
