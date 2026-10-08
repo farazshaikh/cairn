@@ -953,3 +953,12 @@ public item fails the clippy command above.
 
 No dependencies outside the Rust standard library are allowed. Building
 needs Rust 1.89 or later (`std::fs::File::try_lock`).
+
+## License
+
+Copyright (c) 2026 Faraz Shaikh. All rights reserved.
+
+cairn is licensed under the [PolyForm Strict License 1.0.0](LICENSE.md): you
+may use it for noncommercial purposes only, and may not distribute it or make
+changes or new works based on it. Commercial use of any kind is not permitted
+without a separate written license from the copyright holder.

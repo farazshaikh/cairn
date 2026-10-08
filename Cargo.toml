@@ -12,7 +12,7 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-license = "UNLICENSED"
+license = "LicenseRef-PolyForm-Strict-1.0.0"
 publish = false
 
 [workspace.lints.rust]
