@@ -67,6 +67,7 @@ impl BTree {
         self.root
     }
 
+    /// The value stored under `key`, if any.
     pub fn get(&self, pager: &mut Pager, key: &[u8]) -> Result<Option<Vec<u8>>> {
         if key.len() > MAX_KEY_LEN {
             return Ok(None);

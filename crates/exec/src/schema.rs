@@ -15,8 +15,11 @@ use crate::error::ExecError;
 /// name order.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TableSchema {
+    /// The table name.
     pub name: String,
+    /// The columns in declaration order.
     pub columns: Vec<ColumnSchema>,
+    /// Indexes made by `CREATE INDEX`, in name order.
     pub indexes: Vec<IndexSchema>,
 }
 
@@ -24,18 +27,26 @@ pub struct TableSchema {
 /// PRIMARY KEY column does not report it unless it was written.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ColumnSchema {
+    /// The column name.
     pub name: String,
+    /// The declared type.
     pub data_type: DataType,
+    /// Declared `PRIMARY KEY`.
     pub primary_key: bool,
+    /// Declared `NOT NULL`.
     pub not_null: bool,
+    /// Declared `UNIQUE`.
     pub unique: bool,
 }
 
 /// One index created with `CREATE [UNIQUE] INDEX`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct IndexSchema {
+    /// The index name.
     pub name: String,
+    /// The indexed column.
     pub column: String,
+    /// Made by `CREATE UNIQUE INDEX`.
     pub unique: bool,
 }
 

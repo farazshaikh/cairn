@@ -9,10 +9,15 @@ use cairn_sql::DataType;
 /// One SQL value. A `Real` is always finite and never `-0.0`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
+    /// SQL `NULL`.
     Null,
+    /// A 64-bit integer.
     Integer(i64),
+    /// A finite double; never `-0.0`.
     Real(f64),
+    /// UTF-8 text.
     Text(String),
+    /// `TRUE` or `FALSE`.
     Boolean(bool),
 }
 
@@ -27,10 +32,12 @@ impl Value {
         }
     }
 
+    /// Whether the value is `NULL`.
     pub fn is_null(&self) -> bool {
         matches!(self, Value::Null)
     }
 
+    /// The type of the value; `SqlType::Null` for `NULL`.
     pub fn sql_type(&self) -> SqlType {
         match self {
             Value::Null => SqlType::Null,

@@ -7,9 +7,13 @@
 /// not bytes. Only `\n` starts a new line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Span {
+    /// Byte offset of the first byte.
     pub start: usize,
+    /// Byte offset just past the last byte.
     pub end: usize,
+    /// 1-based line of `start`.
     pub line: usize,
+    /// 1-based column of `start`, in characters.
     pub column: usize,
 }
 

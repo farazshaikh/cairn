@@ -43,7 +43,9 @@ const MAX_INTEGRITY_ROWS: usize = 100;
 pub enum QueryResult {
     /// Rows of a SELECT, EXPLAIN or PRAGMA, with the output column names.
     Rows {
+        /// Output column names, in select-list order.
         columns: Vec<String>,
+        /// The rows, in output order.
         rows: Vec<Vec<Value>>,
     },
     /// Rows changed by INSERT, UPDATE or DELETE; 0 for DDL and for BEGIN,
@@ -68,6 +70,8 @@ impl Database {
         Database::create_with(Arc::new(OsVfs), path.as_ref(), Options::default())
     }
 
+    /// Opens an existing database file, replaying its write-ahead log if no
+    /// other handle in the process has it open.
     pub fn open(path: impl AsRef<Path>) -> Result<Database, ExecError> {
         Database::open_with(Arc::new(OsVfs), path.as_ref(), Options::default())
     }

@@ -72,6 +72,7 @@ pub struct Options {
 }
 
 impl Options {
+    /// Options with the given pool capacity and checkpoint threshold.
     pub fn new(pool_pages: usize, checkpoint_frames: u32) -> Options {
         Options {
             pool_pages,
@@ -204,6 +205,7 @@ impl Pager {
         self.start(true)
     }
 
+    /// Whether this handle has a write transaction open.
     pub fn in_transaction(&self) -> bool {
         self.txn.is_some()
     }
@@ -355,6 +357,7 @@ impl Pager {
         Ok(())
     }
 
+    /// Ends one `begin_read`; the outermost one releases the snapshot.
     pub fn end_read(&mut self) {
         if self.read_depth == 0 {
             return;
@@ -435,6 +438,7 @@ impl Pager {
         self.with_pool(|pool, load| Ok(pool.page(id, load)?.clone()))
     }
 
+    /// Replaces page `id` in the open transaction.
     pub fn write(&mut self, id: PageId, page: &Page) -> Result<()> {
         self.check_id(id)?;
         self.txn_mut()?.put(id, page.clone());
@@ -497,6 +501,7 @@ impl Pager {
         self.with_pool(|pool, load| pool.pin(id, load))
     }
 
+    /// Releases one `pin` of `id`.
     pub fn unpin(&mut self, id: PageId) -> Result<()> {
         self.check_id(id)?;
         self.pool.unpin(id)
@@ -546,6 +551,7 @@ impl Pager {
         Ok(())
     }
 
+    /// The root page recorded under `name`, if any.
     pub fn root(&self, name: &str) -> Option<PageId> {
         self.header(|h| {
             h.roots
@@ -583,6 +589,7 @@ impl Pager {
         })
     }
 
+    /// The buffer pool capacity in pages.
     pub fn pool_capacity(&self) -> usize {
         self.pool.capacity()
     }
@@ -592,10 +599,12 @@ impl Pager {
         self.pool.resident()
     }
 
+    /// Whether page `id` is in this handle's buffer pool.
     pub fn is_cached(&self, id: PageId) -> bool {
         self.pool.is_cached(id)
     }
 
+    /// Buffer pool hit, miss and eviction counts so far.
     pub fn stats(&self) -> PoolStats {
         let pool = self.pool.stats();
         PoolStats {

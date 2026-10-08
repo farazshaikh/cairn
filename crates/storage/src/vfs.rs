@@ -24,6 +24,7 @@ pub trait Vfs: Send + Sync {
     fn open(&self, path: &Path) -> io::Result<Box<dyn VfsFile>>;
     /// Opens a file, creating it empty when missing.
     fn open_or_create(&self, path: &Path) -> io::Result<Box<dyn VfsFile>>;
+    /// Whether a file exists at `path`.
     fn exists(&self, path: &Path) -> io::Result<bool>;
     /// A stable key for `path`, so different spellings of one file share
     /// state. Fails if the file does not exist.
@@ -37,6 +38,7 @@ pub trait VfsFile: Send {
     fn read_at(&mut self, offset: u64, buf: &mut [u8]) -> io::Result<usize>;
     /// Writes all of `data` at `offset`, extending the file if needed.
     fn write_at(&mut self, offset: u64, data: &[u8]) -> io::Result<()>;
+    /// Truncates or extends the file to `len` bytes.
     fn set_len(&mut self, len: u64) -> io::Result<()>;
     /// Current length in bytes.
     fn size(&mut self) -> io::Result<u64>;

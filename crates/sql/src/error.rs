@@ -10,7 +10,9 @@ use crate::span::Span;
 /// line containing the error, and a caret under the column.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SqlError {
+    /// What went wrong, without the position.
     pub message: String,
+    /// Where in the source the error is.
     pub span: Span,
     /// The source line containing `span.start`, without its line break.
     pub source_line: String,

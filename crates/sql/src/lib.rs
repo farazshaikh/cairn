@@ -5,6 +5,7 @@
 //! error is a [`SqlError`] whose `Display` points at the offending column, and
 //! every syntax tree type prints canonical SQL through `Display` that parses
 //! back to an equal tree. The README "SQL" section lists the grammar.
+#![warn(missing_docs)]
 #![cfg_attr(
     not(test),
     deny(

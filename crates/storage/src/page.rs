@@ -28,10 +28,12 @@ impl Page {
         Page(Box::new([0; PAGE_SIZE]))
     }
 
+    /// The page's bytes.
     pub fn bytes(&self) -> &[u8; PAGE_SIZE] {
         &self.0
     }
 
+    /// The page's bytes, for writing.
     pub fn bytes_mut(&mut self) -> &mut [u8; PAGE_SIZE] {
         &mut self.0
     }

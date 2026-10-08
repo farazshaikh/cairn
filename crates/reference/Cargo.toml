@@ -1,0 +1,16 @@
+[package]
+name = "cairn-reference"
+description = "Independent in-memory reference evaluator for the cairn SQL subset"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+bench = false
+
+[dependencies]
+cairn-sql = { path = "../sql" }
+
+[lints]
+workspace = true

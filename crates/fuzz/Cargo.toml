@@ -1,0 +1,23 @@
+[package]
+name = "cairn-fuzz"
+description = "Deterministic fuzzing, differential testing and benchmarks for cairn"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+bench = false
+
+[[bench]]
+name = "workloads"
+harness = false
+
+[dependencies]
+cairn-sql = { path = "../sql" }
+cairn-exec = { path = "../exec" }
+cairn-storage = { path = "../storage" }
+cairn-reference = { path = "../reference" }
+
+[lints]
+workspace = true

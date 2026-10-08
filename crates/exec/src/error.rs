@@ -92,18 +92,22 @@ impl ExecError {
         self
     }
 
+    /// The class of the error.
     pub fn kind(&self) -> ErrorKind {
         self.0.kind
     }
 
+    /// The message, without position or source line.
     pub fn message(&self) -> &str {
         &self.0.message
     }
 
+    /// Where in the SQL text the error is, when it relates to the text.
     pub fn span(&self) -> Option<Span> {
         self.0.span
     }
 
+    /// The source line containing the span, without its line break.
     pub fn source_line(&self) -> Option<&str> {
         self.0.source_line.as_deref()
     }

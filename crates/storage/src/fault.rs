@@ -36,7 +36,12 @@ pub enum Fault {
     /// Write N applies only a prefix of its bytes, chosen from `keep_seed`
     /// (at least 1 byte, never all of them), fails, and the layer stops. A
     /// `set_len` or a one-byte write cannot be torn; it is applied whole.
-    TearWrite { write: u64, keep_seed: u64 },
+    TearWrite {
+        /// The 1-based write to tear.
+        write: u64,
+        /// Chooses how many bytes are applied.
+        keep_seed: u64,
+    },
 }
 
 /// Which bytes survive [`FaultVfs::crash`].
@@ -51,14 +56,25 @@ pub enum CrashMode {
 /// One applied operation, in order, for ordering assertions.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Event {
+    /// The file the operation applied to.
     pub path: PathBuf,
+    /// What was done.
     pub op: Op,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// A file operation recorded by [`FaultVfs`].
 pub enum Op {
-    Write { offset: u64, len: usize },
+    /// Bytes were written.
+    Write {
+        /// Where the write started.
+        offset: u64,
+        /// How many bytes were applied.
+        len: usize,
+    },
+    /// The file was truncated or extended to this length.
     SetLen(u64),
+    /// The file was synced.
     Sync,
 }
 
@@ -135,6 +151,7 @@ impl FaultVfs {
         lock(&self.state).writes
     }
 
+    /// Syncs applied or attempted so far.
     pub fn syncs(&self) -> u64 {
         lock(&self.state).syncs
     }
@@ -144,6 +161,7 @@ impl FaultVfs {
         lock(&self.state).stopped
     }
 
+    /// Every applied operation so far, in order.
     pub fn events(&self) -> Vec<Event> {
         lock(&self.state).events.clone()
     }

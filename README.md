@@ -15,13 +15,17 @@ runs SQL interactively or from a script.
 | `crates/sql` | Tokenizer, parser and syntax tree for the supported SQL |
 | `crates/exec` | Catalog, planner and executor connecting SQL to storage |
 | `crates/cli` | The `cairn` interactive shell |
+| `crates/reference` | Independent in-memory reference evaluator for fuzzing |
+| `crates/fuzz` | Fuzz targets, the differential harness and benchmarks |
 
 Status: `crates/storage` provides the pager, buffer pool, B-tree and
 write-ahead log (see [Storage](#storage) and
 [Transactions and durability](#transactions-and-durability)), `crates/sql`
 the tokenizer and parser (see [SQL](#sql)), `crates/exec` the catalog,
-planner, executor and SQL transactions (see [Querying](#querying)), and
-`crates/cli` the `cairn` shell (see [Shell](#shell)).
+planner, executor and SQL transactions (see [Querying](#querying)),
+`crates/cli` the `cairn` shell (see [Shell](#shell)), and
+`crates/reference` and `crates/fuzz` the fuzzing and benchmarks (see
+[Fuzzing](#fuzzing) and [Benchmarks](#benchmarks)).
 
 ## Storage
 
@@ -387,6 +391,9 @@ row is read, so `SELECT 'a' + 1 FROM empty_table` fails too.
   `REAL` together give `REAL`.
 - Integer overflow (including `ABS` and `SUM`), a non-finite real result and
   division or modulo by zero are errors, never panics or wrapped values.
+  `SUM` of integers is an error only when the total does not fit a 64-bit
+  integer, whatever order the rows are read in.
+- A `REAL` zero is always `0.0`: `-0.0` is stored and printed as `0.0`.
   Constant expressions in an indexable predicate (`id = 1 / 0`) are evaluated
   once while planning, even if the table is empty.
 
@@ -419,6 +426,10 @@ row is read, so `SELECT 'a' + 1 FROM empty_table` fails too.
 | `COUNT(*)`, `COUNT(x)`, `COUNT(DISTINCT x)` | any | `INTEGER` |
 | `SUM(n)`, `AVG(n)` | number | `SUM`: same type; `AVG`: `REAL` |
 | `MIN(x)`, `MAX(x)` | any | same type |
+
+`x LIKE pattern` matches the whole text: `%` matches any run of characters
+(including none), `_` exactly one character, and every other character
+itself, case-sensitively. There is no escape character.
 
 `DISTINCT` is allowed in any aggregate. Aggregates are not allowed in
 `WHERE`, `ON`, `GROUP BY`, `VALUES` or `SET`, and cannot be nested. In a
@@ -605,7 +616,9 @@ cannot validate.
   by copying its pages into the main file as a checkpoint does, and stops at
   the first incomplete, torn or corrupt record. Recovery is idempotent: it
   empties the log only after the main file is synced, so a crash during
-  recovery is repaired by the next open.
+  recovery is repaired by the next open. Recovery runs before the header is
+  validated, so opening a damaged file whose log holds committed
+  transactions can fail after those transactions were copied into it.
 
 **Crash guarantee.** After a crash, reopening the database yields exactly
 the state after some committed transaction, never a partial one. That state
@@ -682,8 +695,10 @@ with a short description of the options.
 - With `--create`, a missing PATH is created as a new database, and an
   existing one is opened.
 - A file that is not a cairn database, is corrupt, cannot be read or is
-  locked by another process is refused with `error: cannot open PATH: ...`,
-  and its bytes are left unchanged.
+  locked by another process is refused with `error: cannot open PATH: ...`.
+  Its bytes are left unchanged, except that committed transactions still in
+  its log are first replayed into it (see
+  [recovery](#commit-checkpoint-and-recovery)).
 
 ### Modes
 
@@ -780,13 +795,149 @@ id	body
 - One process at a time per file: see the operating-system lock under
   [Transactions and durability](#transactions-and-durability).
 
+## Fuzzing
+
+`crates/fuzz` holds deterministic fuzz targets that run under `cargo test`
+with only the standard library. Each case runs on its own thread with a
+16 MiB stack and a time limit, so a panic or a hang is reported with its
+seed rather than ending the run.
+
+| Target (`cargo test -p ... --test`) | Default cases | Checks |
+|--------|---------------|--------|
+| `cairn-fuzz` `differential` | 500 | cairn and the reference evaluator agree on every statement |
+| `cairn-fuzz` `sql_fuzz` | 1500 | random bytes, token streams, generated statements and expressions at the depth limit: no panic, valid error positions, canonical round trip |
+| `cairn-fuzz` `file_fuzz` | 300 | damaged database and log files: no panic or hang, typed errors |
+| `cairn-reference` `golden_agreement` | all scripts | the reference reproduces the golden files |
+
+### Running, replaying and longer runs
+
+- `CAIRN_FUZZ_SEED` (decimal or `0x` hex, non-zero) and `CAIRN_FUZZ_CASES`
+  replace a target's default seed and case count. Case `i` uses a seed
+  derived from the run seed and `i`, so `CAIRN_FUZZ_CASE=i` replays just
+  that case.
+- A failure prints the target, seed and case, a replay command, the
+  disagreement and a reproducer. For the differential target the
+  reproducer is the case shrunk to the fewest statements that still
+  disagree, one per line, with `-- @reopen` where the database was closed
+  and reopened. Without reopens it runs as is:
+  `cairn --create x.db < repro.sql`.
+- A longer run, for example before a release:
+
+  ```sh
+  CAIRN_FUZZ_CASES=20000 cargo test --release -p cairn-fuzz --test differential
+  CAIRN_FUZZ_SEED=0x1234 CAIRN_FUZZ_CASES=40000 cargo test --release -p cairn-fuzz --test sql_fuzz
+  ```
+
+### The reference evaluator
+
+`crates/reference` (`cairn_reference::Engine`) evaluates the SQL subset in
+memory. It depends only on `cairn-sql` and follows the rules in this
+README: types, NULL, functions, keys and constraints, atomicity and
+transactions. It also follows the planner rules in
+[Planner and EXPLAIN](#planner-and-explain), because they decide row order
+without `ORDER BY` and which rows an expression is evaluated on (an error
+in a row the access path skips never happens). Its gaps are `EXPLAIN` and
+`PRAGMA` output (checked for errors only), the storage size limits, and
+storage, corruption and concurrency errors. Its errors have a kind but no
+message. `crates/reference/tests/golden_agreement.rs` runs 45 of the 51
+golden scripts (all but the `EXPLAIN` and `PRAGMA` ones): rows and
+`affected` blocks must match byte for byte, and errors must be errors.
+
+### Differential cases
+
+A case is 1 to 3 tables with random types and constraints, data, indexes
+created before or after the data, and 5 to 25 statements: queries with
+joins, grouping, `DISTINCT`, `ORDER BY` and `LIMIT`; `INSERT`, `UPDATE` and
+`DELETE`; transactions, some misplaced; and closing and reopening the
+database. Results are compared by kind and value, never by message:
+without `ORDER BY` rows are compared as a multiset, and with it rows may
+differ in order only among ties. The generator follows rules that keep the
+correct result independent of row order (see `crates/fuzz/src/generate`):
+
+- `LIMIT` only when `ORDER BY` covers every output column;
+- `SUM` only over `REAL` columns or integer columns whose values are small
+  or all of one sign;
+- `REAL` values are multiples of 1/4, `0.0`, `-0.0` or `1e300`;
+- a statement with two or more possible runtime errors is compared only on
+  whether it failed, not on the error kind.
+
+The test asserts that every feature appears in at least 1% of cases, that
+every rule fires, and that most indexable queries use an index. A
+self-test checks that the harness catches and shrinks a deliberately wrong
+reference. To cover a new feature, add it to the generator in
+`crates/fuzz/src/generate`, add a counter name to `FEATURES` in
+`crates/fuzz/tests/differential.rs`, and teach the reference the rule from
+this README.
+
+### Damaged files
+
+`file_fuzz` builds two databases in memory with
+`cairn_storage::fault::FaultVfs`: one closed cleanly, one with recent
+commits only in its log. Each case flips bits, overwrites bytes, rewrites a
+header field, swaps pages, truncates or appends, in the database file or
+the log. It then opens the result, runs `check()`, a fixed set of queries
+including `PRAGMA integrity_check`, and `close()`. Every 15th case repeats
+through real files. A failed open must be a `Corrupt` or `Storage` error,
+and with an empty log it must leave the database file unchanged. Queries
+may also fail with `NotFound` when the damage removed a catalog entry.
+
+## Benchmarks
+
+```sh
+cargo bench -p cairn-fuzz --bench workloads             # 20 000 rows, 5 timed runs
+cargo bench -p cairn-fuzz --bench workloads -- --quick  # 2 000 rows, 1 timed run
+CAIRN_BENCH_QUICK=1 cargo bench --workspace             # quick, workspace-wide
+```
+
+The benchmarks use only the standard library (`harness = false`,
+`std::time::Instant`). Each workload builds its database in a temporary
+file without timing it, times one operation, and checks the result, so a
+broken workload fails instead of reporting a time. `--quick` is not passed
+to a workspace-wide `cargo bench`, because Cargo gives the arguments after
+`--` to every benchmark binary, so use `CAIRN_BENCH_QUICK=1` there.
+`crates/fuzz/tests/bench_smoke.rs` runs every workload at 100 rows under
+`cargo test`. Times are reported, never judged.
+
+| Workload | Timed |
+|----------|-------|
+| `insert_autocommit` | rows/10 single-row `INSERT`s, each committed (one log sync each) |
+| `insert_txn` | `BEGIN`, rows `INSERT`s in batches of 100, `COMMIT` |
+| `pk_lookup` | 1000 `SELECT`s by `INTEGER PRIMARY KEY` |
+| `index_lookup` | 1000 `SELECT COUNT(*)` by an indexed column (rows/100 matches each) |
+| `scan_filter` | one full scan with a filter |
+| `join` | `SUM` over an index join of rows/10 and rows |
+| `group_by` | `GROUP BY` into 100 groups with `COUNT` and `SUM` |
+| `checkpoint` | `PRAGMA checkpoint` of rows committed rows |
+| `reopen_recovery` | open with log replay of rows committed rows |
+
+An illustrative full run (Apple M5 Max, macOS, APFS, rustc 1.95.0,
+2026-10-08); expect different numbers elsewhere:
+
+```text
+workload              rows  runs    median ms       min ms
+insert_autocommit    20000     5     7378.931     7264.622
+insert_txn           20000     5      493.907      487.918
+pk_lookup            20000     5        9.064        8.885
+index_lookup         20000     5     1500.212     1486.918
+scan_filter          20000     5        3.070        2.966
+join                 20000     5       27.567       26.857
+group_by             20000     5        3.876        3.726
+checkpoint           20000     5       13.052       11.713
+reopen_recovery      20000     5       23.881       21.783
+```
+
 ## Development
 
 ```sh
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --check
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+cargo bench -p cairn-fuzz --bench workloads -- --quick
 ```
+
+Every library crate sets `#![warn(missing_docs)]`, so an undocumented
+public item fails the clippy command above.
 
 No dependencies outside the Rust standard library are allowed. Building
 needs Rust 1.89 or later (`std::fs::File::try_lock`).

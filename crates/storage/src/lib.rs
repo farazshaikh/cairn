@@ -25,6 +25,7 @@
 //! file system; [`fault::FaultVfs`] is an in-memory double that injects
 //! crashes for tests.
 
+#![warn(missing_docs)]
 #![cfg_attr(
     not(test),
     deny(

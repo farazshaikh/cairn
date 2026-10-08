@@ -17,6 +17,7 @@
 //! index keys) and `catalog.rs` (catalog entries, version 1). The README
 //! "Querying" section describes the SQL semantics.
 
+#![warn(missing_docs)]
 #![cfg_attr(
     not(test),
     deny(

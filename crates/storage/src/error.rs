@@ -9,7 +9,9 @@ use crate::page::{PAGE_SIZE, PageId};
 /// Which half of a key/value pair exceeded its size limit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SizeKind {
+    /// The key.
     Key,
+    /// The value.
     Value,
 }
 
@@ -29,27 +31,57 @@ pub enum StorageError {
     /// The operating system reported an I/O failure.
     Io(io::Error),
     /// The file is shorter than one page, so it cannot hold a header.
-    FileTooShort { len: u64 },
+    FileTooShort {
+        /// The file length in bytes.
+        len: u64,
+    },
     /// The file length is not a whole number of pages.
-    NotPageMultiple { len: u64 },
+    NotPageMultiple {
+        /// The file length in bytes.
+        len: u64,
+    },
     /// Page 0 does not start with `cairn\0`.
-    BadMagic { found: [u8; 6] },
+    BadMagic {
+        /// The first six bytes of the file.
+        found: [u8; 6],
+    },
     /// The header names a format version this build cannot read.
-    UnsupportedVersion { found: u32 },
+    UnsupportedVersion {
+        /// The version in the header.
+        found: u32,
+    },
     /// A page failed structural validation while being decoded.
-    Corrupt { page: PageId, reason: &'static str },
+    Corrupt {
+        /// The page that failed.
+        page: PageId,
+        /// What was wrong with it.
+        reason: &'static str,
+    },
     /// Every buffer pool frame is pinned, so no page can be brought in.
     PoolExhausted,
     /// The requested buffer pool capacity is below the minimum.
-    PoolTooSmall { requested: usize, min: usize },
+    PoolTooSmall {
+        /// The capacity asked for, in pages.
+        requested: usize,
+        /// The smallest capacity allowed.
+        min: usize,
+    },
     /// A key or value exceeds its size limit.
     TooLarge {
+        /// Whether the key or the value is too large.
         kind: SizeKind,
+        /// Its length in bytes.
         len: usize,
+        /// The limit in bytes.
         max: usize,
     },
     /// A page id is not valid for the requested operation.
-    InvalidPage { page: PageId, reason: &'static str },
+    InvalidPage {
+        /// The page id that was refused.
+        page: PageId,
+        /// Why it was refused.
+        reason: &'static str,
+    },
     /// The 32-bit page id space is exhausted.
     DatabaseFull,
     /// A root name is empty or longer than 32 bytes.
@@ -57,7 +89,10 @@ pub enum StorageError {
     /// All 16 named root slots are in use.
     RootTableFull,
     /// Another handle holds the write lock, or readers block a checkpoint.
-    Busy { reason: &'static str },
+    Busy {
+        /// What holds the lock.
+        reason: &'static str,
+    },
     /// `commit`, `rollback` or `savepoint` was called with no transaction.
     NoTransaction,
     /// `begin` or `checkpoint` was called while this handle has a

@@ -5,7 +5,9 @@ use crate::span::Span;
 /// One lexical token and the source text it covers.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token {
+    /// What the token is.
     pub kind: TokenKind,
+    /// Where the token is in the source.
     pub span: Span,
 }
 
@@ -16,28 +18,45 @@ pub enum TokenKind {
     Keyword(Keyword),
     /// An identifier, lowercased unless it was double-quoted.
     Ident(String),
+    /// An integer literal that fits `i64`.
     Integer(i64),
+    /// A finite real literal.
     Real(f64),
     /// A single-quoted string with `''` escapes resolved.
     String(String),
+    /// `=`
     Eq,
     /// `<>` or `!=`.
     NotEq,
+    /// `<`
     Lt,
+    /// `<=`
     LtEq,
+    /// `>`
     Gt,
+    /// `>=`
     GtEq,
+    /// `+`
     Plus,
+    /// `-`
     Minus,
+    /// `*`
     Star,
+    /// `/`
     Slash,
+    /// `%`
     Percent,
     /// `||`
     Concat,
+    /// `(`
     LParen,
+    /// `)`
     RParen,
+    /// `,`
     Comma,
+    /// `.`
     Dot,
+    /// `;`
     Semicolon,
     /// End of input; always the last token.
     Eof,
@@ -49,7 +68,7 @@ macro_rules! keywords {
         /// them (`"order"`) to use them as names.
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
         pub enum Keyword {
-            $($variant,)*
+            $(#[doc = concat!("`", $text, "`")] $variant,)*
         }
 
         impl Keyword {

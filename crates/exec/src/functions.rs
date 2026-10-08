@@ -90,7 +90,8 @@ pub struct Accumulator {
     real: bool,
     seen: Option<BTreeSet<OrdRow>>,
     count: i64,
-    int_sum: i64,
+    /// Exact integer total for SUM and AVG; SUM checks that it fits `i64`
+    /// only at the end, so the row order cannot cause an overflow.
     wide_sum: i128,
     real_sum: f64,
     best: Option<Value>,
@@ -105,7 +106,6 @@ impl Accumulator {
             real,
             seen: distinct.then(BTreeSet::new),
             count: 0,
-            int_sum: 0,
             wide_sum: 0,
             real_sum: 0.0,
             best: None,
@@ -157,17 +157,10 @@ impl Accumulator {
     fn add_number(&mut self, value: &Value) -> Result<(), ExecError> {
         let number = match value {
             Value::Integer(v) if !self.real => {
-                if self.func == AggFn::Sum {
-                    self.int_sum = self
-                        .int_sum
-                        .checked_add(*v)
-                        .ok_or_else(|| overflow(self.span))?;
-                } else {
-                    self.wide_sum = self
-                        .wide_sum
-                        .checked_add(i128::from(*v))
-                        .ok_or_else(|| overflow(self.span))?;
-                }
+                self.wide_sum = self
+                    .wide_sum
+                    .checked_add(i128::from(*v))
+                    .ok_or_else(|| overflow(self.span))?;
                 return Ok(());
             }
             Value::Integer(v) => *v as f64,
@@ -190,7 +183,9 @@ impl Accumulator {
         }
         match self.func {
             AggFn::Sum if self.real => Ok(Value::real(self.real_sum)),
-            AggFn::Sum => Ok(Value::Integer(self.int_sum)),
+            AggFn::Sum => i64::try_from(self.wide_sum)
+                .map(Value::Integer)
+                .map_err(|_| overflow(self.span)),
             AggFn::Avg => {
                 let total = if self.real {
                     self.real_sum

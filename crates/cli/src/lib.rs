@@ -9,6 +9,7 @@
 //!
 //! Exit codes: 0 success, 1 a failed statement (script mode), open, read,
 //! write or close, 2 a usage error.
+#![warn(missing_docs)]
 
 mod args;
 mod meta;
