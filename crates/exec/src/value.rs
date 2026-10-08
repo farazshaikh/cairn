@@ -93,6 +93,18 @@ impl SqlType {
         }
     }
 
+    /// The declared column type this type came from; `None` for `Null`,
+    /// which no column has.
+    pub fn data_type(self) -> Option<DataType> {
+        match self {
+            SqlType::Integer => Some(DataType::Integer),
+            SqlType::Real => Some(DataType::Real),
+            SqlType::Text => Some(DataType::Text),
+            SqlType::Boolean => Some(DataType::Boolean),
+            SqlType::Null => None,
+        }
+    }
+
     pub fn is_numeric(self) -> bool {
         matches!(self, SqlType::Integer | SqlType::Real)
     }

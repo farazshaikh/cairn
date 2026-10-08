@@ -7,6 +7,8 @@ name = "cairn-cli"
 version = "0.1.0"
 dependencies = [
  "cairn-exec",
+ "cairn-sql",
+ "cairn-storage",
 ]
 
 [[package]]

@@ -41,10 +41,13 @@ mod integrity;
 mod like;
 mod plan;
 mod prepass;
+pub mod render;
+mod schema;
 mod select;
 mod table;
 mod value;
 
 pub use database::{Database, QueryResult};
 pub use error::{ErrorKind, ExecError};
+pub use schema::{ColumnSchema, IndexSchema, TableSchema};
 pub use value::Value;

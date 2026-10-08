@@ -19,9 +19,9 @@ runs SQL interactively or from a script.
 Status: `crates/storage` provides the pager, buffer pool, B-tree and
 write-ahead log (see [Storage](#storage) and
 [Transactions and durability](#transactions-and-durability)), `crates/sql`
-the tokenizer and parser (see [SQL](#sql)), and `crates/exec` the catalog,
-planner, executor and SQL transactions (see [Querying](#querying)).
-`crates/cli` is a scaffold delivered by a later milestone.
+the tokenizer and parser (see [SQL](#sql)), `crates/exec` the catalog,
+planner, executor and SQL transactions (see [Querying](#querying)), and
+`crates/cli` the `cairn` shell (see [Shell](#shell)).
 
 ## Storage
 
@@ -356,6 +356,13 @@ step	depth	operation	detail
   `Display` uses the same three-line caret form as `SqlError`.
 - `check()` returns the first problem that `PRAGMA integrity_check` would
   list (see [Transactions and durability](#transactions-and-durability)).
+- `schema()` lists the tables this handle can see, in name order, with
+  their columns and the indexes made by `CREATE INDEX` (the implicit indexes
+  behind `PRIMARY KEY` and `UNIQUE` are left out). `TableSchema` gives back
+  canonical `CREATE TABLE` and `CREATE INDEX` text that parses to the same
+  definitions.
+- `cairn_exec::render` prints results in the golden-test format described
+  below; the `cairn` shell uses it.
 - Statements outside `BEGIN` commit one by one (autocommit); see
   [Transactions and durability](#transactions-and-durability).
 
@@ -495,9 +502,11 @@ key. The exact byte layouts are offset tables in `crates/exec/src/catalog.rs`,
 
 `tests/sql/NNN_name.sql` scripts are paired with `NNN_name.expected` files.
 `crates/exec/tests/golden.rs` runs each script against a fresh database and
-compares the output byte for byte. It needs at least 40 scripts, and its
+compares the output byte for byte, and `crates/cli/tests/script.rs` does the
+same through the `cairn` binary. It needs at least 40 scripts, and its
 module documentation maps each milestone rule to the scripts that cover it.
-Each statement produces one block, and blocks are separated by a blank line:
+Each statement produces one block (`cairn_exec::render`), and blocks are
+separated by a blank line:
 
 - rows: a tab-separated header line, then one line per row. Values print as
   `NULL`, `TRUE`/`FALSE`, decimal integers, reals in canonical form (`1.0`,
@@ -637,18 +646,147 @@ a whole statement, and an unknown name is an `Unsupported` error.
 
 - A transaction's changed pages are held in memory (4 KiB each) until
   commit.
-- Only one process may use a file. There is no operating-system lock, and
-  two processes on one file will corrupt it.
+- A process that opens a file holds an exclusive operating-system lock on
+  it (`std::fs::File::try_lock`: `flock` on Unix, `LockFileEx` on Windows)
+  until its last handle on the file closes or the process exits. Handles in
+  one process share the file. Opening it from another process fails at once
+  with a `Busy` error, `database is busy: the file is locked by another
+  process`, before the file or its log is read or written.
+- The lock is advisory on Unix: it keeps other cairn processes out, not
+  programs that ignore locks, and network file systems may not honour it.
+  Two paths to one file through a hard link count as two files, so the
+  second open fails with `Busy` even in the same process.
 - `create` empties an orphan `<file>-wal`. Otherwise a log left beside a
   file is assumed to belong to it.
 - A build from before the log (milestone 3) ignores a non-empty `-wal`; a
   cleanly closed file has an empty one.
+
+## Shell
+
+`cairn` (crate `crates/cli`) opens a database file and runs SQL from
+standard input.
+
+```sh
+cargo build --release -p cairn-cli          # builds target/release/cairn
+cairn --create library.cairn                # interactive in a terminal
+cairn library.cairn < script.sql            # runs a script
+```
+
+Usage is `cairn [--create] [--interactive] PATH`; `cairn --help` prints it
+with a short description of the options.
+
+### Opening a database
+
+- Without `--create`, PATH must exist: a missing PATH is an error and no
+  file is created.
+- With `--create`, a missing PATH is created as a new database, and an
+  existing one is opened.
+- A file that is not a cairn database, is corrupt, cannot be read or is
+  locked by another process is refused with `error: cannot open PATH: ...`,
+  and its bytes are left unchanged.
+
+### Modes
+
+The shell is interactive when standard input is a terminal or
+`--interactive` is given. Otherwise it runs in script mode and prints no
+prompts.
+
+- **Script mode** reads all of standard input and runs it with
+  `Database::execute_each`, exactly like the golden tests: a syntax error
+  anywhere runs nothing, and positions refer to the script. A statement that
+  fails does not stop the ones after it.
+- **Interactive mode** prompts with `cairn> `, and with `   ...> ` while a
+  statement is incomplete. A statement ends at a `;` outside string
+  literals, quoted identifiers and comments. Each complete statement runs on
+  its own, and several on one line run in order. Line and column in an error
+  count from the statement's first character (after any leading whitespace
+  and comments). Errors never end the session, and blank lines do nothing.
+
+### Output
+
+Results print in the [golden-test format](#golden-tests). In interactive
+mode a block is followed directly by the next prompt rather than a blank
+line. Statement and meta-command errors go to standard output with the
+results. Usage errors, open, read, write and close failures, and warnings go
+to standard error.
+
+### Meta-commands
+
+In interactive mode, a line starting with `.` at the `cairn> ` prompt is a
+command. While a statement is incomplete, such a line is SQL, and in script
+mode it is always SQL (and a syntax error).
+
+| Command | Effect |
+|---------|--------|
+| `.help` | lists the commands |
+| `.quit`, `.exit` | ends the session |
+| `.tables` | table names in ascending order, one per line |
+| `.schema [TABLE]` | `CREATE TABLE` and `CREATE INDEX` statements for every table, or for TABLE; the output can be run to recreate the schema |
+
+`TABLE` follows SQL name rules: `.schema Books` finds `books`, and
+`.schema "Books"` finds `Books`. An unknown command prints
+`error: unknown command .NAME (enter .help for a list of commands)`.
+
+### Ending a session
+
+End of input (Ctrl-D in a terminal), `.quit` and `.exit` close the database,
+which checkpoints the log. Then:
+
+- an open transaction is discarded, with
+  `warning: open transaction rolled back`;
+- in interactive mode, an incomplete statement is discarded, with
+  `warning: incomplete statement discarded`.
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | success; in interactive mode, statement errors do not count |
+| 1 | a statement failed (script mode), or the database could not be opened, read from standard input, written to standard output or closed |
+| 2 | usage error: no PATH, more than one PATH, or an unknown or repeated option |
+
+### Example
+
+`crates/cli/tests/readme_shell.rs` pipes this script into
+`cairn --create` on a new file and checks the output below; the exit code is
+1 because the third statement fails.
+
+```sql
+CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT NOT NULL);
+INSERT INTO notes VALUES (1, 'first'), (2, 'second');
+INSERT INTO notes VALUES (1, 'again');
+SELECT id, body FROM notes ORDER BY id DESC;
+```
+
+```text
+affected 0
+
+affected 2
+
+error: line 3, column 26: PRIMARY KEY constraint failed: notes.id
+
+id	body
+2	second
+1	first
+```
+
+### Limits
+
+- No line editing, history or completion: the shell uses only the standard
+  library.
+- Ctrl-C ends the process at once. Committed work survives, as after any
+  crash (see [Transactions and durability](#transactions-and-durability)),
+  and an open transaction is lost.
+- One process at a time per file: see the operating-system lock under
+  [Transactions and durability](#transactions-and-durability).
 
 ## Development
 
 ```sh
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
+cargo fmt --check
 ```
 
-No dependencies outside the Rust standard library are allowed.
+No dependencies outside the Rust standard library are allowed. Building
+needs Rust 1.89 or later (`std::fs::File::try_lock`).

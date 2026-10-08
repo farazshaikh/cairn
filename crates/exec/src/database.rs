@@ -269,7 +269,7 @@ impl Database {
 
     /// Runs a read-only statement against one committed state (or inside the
     /// open transaction).
-    fn read<T>(
+    pub(crate) fn read<T>(
         &mut self,
         f: impl FnOnce(&mut Database) -> Result<T, ExecError>,
     ) -> Result<T, ExecError> {

@@ -10,6 +10,11 @@
 //! ([`SharedFile::open`]); later handles attach to the live state. The
 //! entry disappears with the last handle.
 //!
+//! The process holds an exclusive operating-system lock on the main file
+//! for as long as its shared state lives ([`VfsFile::try_lock`]), so a
+//! second process fails to open the file with `Busy` before reading either
+//! file.
+//!
 //! Ordering guarantee: the main file is written only by [`State::checkpoint`]
 //! and by recovery, and both sync the log before their first main-file
 //! write, so a page reaches the main file only after the commit record of
@@ -93,6 +98,7 @@ impl SharedFile {
     /// log left at the same path by an earlier database is emptied.
     pub(crate) fn create(vfs: Arc<dyn Vfs>, path: &Path) -> Result<Arc<SharedFile>> {
         let mut main = vfs.create_new(path)?;
+        lock_main(main.as_mut())?;
         let header = Header::new();
         main.write_at(0, header.encode()?.bytes())?;
         main.set_len(PAGE_SIZE as u64)?;
@@ -338,6 +344,23 @@ fn next_salt(last: Option<u64>) -> u64 {
     }
 }
 
+/// Why opening a file another process holds fails.
+pub(crate) const LOCKED_REASON: &str = "the file is locked by another process";
+
+/// Takes the exclusive per-process lock on the main file. It is called once
+/// per file per process, when the shared state is created or recovered and
+/// before either file is read or written; later handles attach to that
+/// state and need no lock of their own. The lock is released when the
+/// state, and with it the main file handle, is dropped.
+fn lock_main(main: &mut dyn VfsFile) -> Result<()> {
+    if main.try_lock()? {
+        return Ok(());
+    }
+    Err(StorageError::Busy {
+        reason: LOCKED_REASON,
+    })
+}
+
 /// First open in this process: replays every committed transaction in the
 /// log into the main file (a checkpoint), empties the log, then validates
 /// the header exactly as before the log existed. Every write here is a
@@ -346,6 +369,7 @@ fn next_salt(last: Option<u64>) -> u64 {
 /// open.
 fn recover(vfs: Arc<dyn Vfs>, path: &Path) -> Result<State> {
     let mut main = vfs.open(path)?;
+    lock_main(main.as_mut())?;
     let log_path = wal_path(path);
     let mut log = None;
     let mut last_salt = None;

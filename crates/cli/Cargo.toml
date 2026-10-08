@@ -10,8 +10,16 @@ publish.workspace = true
 name = "cairn"
 path = "src/main.rs"
 
+[lib]
+name = "cairn_cli"
+path = "src/lib.rs"
+
 [dependencies]
 cairn-exec = { path = "../exec" }
+cairn-sql = { path = "../sql" }
+
+[dev-dependencies]
+cairn-storage = { path = "../storage" }
 
 [lints]
 workspace = true

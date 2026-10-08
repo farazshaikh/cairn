@@ -362,4 +362,9 @@ impl VfsFile for FaultFile {
         }
         Ok(())
     }
+    /// The in-memory layer has no other processes, so the lock is always
+    /// granted. It is not recorded as an event and never fails.
+    fn try_lock(&mut self) -> io::Result<bool> {
+        Ok(true)
+    }
 }

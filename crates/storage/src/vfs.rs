@@ -8,7 +8,7 @@
 //! `read_at` returns fewer bytes than requested only at the end of the file.
 //! Errors are plain `io::Error`s; the pager converts them to `StorageError::Io`.
 
-use std::fs::File;
+use std::fs::{File, TryLockError};
 use std::io::{self, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
@@ -42,6 +42,10 @@ pub trait VfsFile: Send {
     fn size(&mut self) -> io::Result<u64>;
     /// Makes every completed write durable (`fsync`).
     fn sync(&mut self) -> io::Result<()>;
+    /// Takes an exclusive lock on the file without waiting. `Ok(false)` when
+    /// another process, or another open handle to the same file, holds it.
+    /// The lock lasts until this handle is dropped.
+    fn try_lock(&mut self) -> io::Result<bool>;
 }
 
 /// The operating system's file system.
@@ -134,6 +138,14 @@ impl VfsFile for OsFile {
 
     fn sync(&mut self) -> io::Result<()> {
         self.0.sync_all()
+    }
+
+    fn try_lock(&mut self) -> io::Result<bool> {
+        match self.0.try_lock() {
+            Ok(()) => Ok(true),
+            Err(TryLockError::WouldBlock) => Ok(false),
+            Err(TryLockError::Error(e)) => Err(e),
+        }
     }
 }
 
