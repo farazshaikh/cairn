@@ -11,8 +11,11 @@
 //!   transactions in the log, open replays them into the database file
 //!   before it validates the header, as recovery after a crash does);
 //! - after a successful open, `check()`, the fixed queries and `close()`
-//!   either succeed or fail with a typed error. A damaged catalog can lose
-//!   a table, so queries may also fail with `NotFound`.
+//!   either succeed or fail with a `Corrupt` or `Storage` error. Pages have
+//!   no checksums, so damage can leave a valid catalog that names a table
+//!   or column differently (a bit flip turns `person` into `persof`). A
+//!   query that then fails with `NotFound` passes only if the schema the
+//!   damaged file reports differs from the undamaged schema.
 //!
 //! A sample of cases repeats the same bytes through real files.
 
@@ -20,7 +23,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-use cairn_exec::{Database, ErrorKind, ExecError};
+use cairn_exec::{Database, ErrorKind, ExecError, TableSchema};
 use cairn_fuzz::mutate::{apply, pick};
 use cairn_fuzz::rng::Rng;
 use cairn_fuzz::runner::{Budget, CaseResult, run};
@@ -98,6 +101,40 @@ fn images() -> &'static Images {
     })
 }
 
+/// The schema both undamaged images report.
+fn undamaged_schema() -> &'static [TableSchema] {
+    static SCHEMA: OnceLock<Vec<TableSchema>> = OnceLock::new();
+    SCHEMA.get_or_init(|| {
+        let (db_bytes, _) = &images().closed;
+        let vfs = Arc::new(FaultVfs::new());
+        vfs.write_file(Path::new(DB), db_bytes.clone());
+        let mut db = Database::open_with(vfs, Path::new(DB), Options::default()).expect("open");
+        let schema = db.schema().expect("schema");
+        db.close().expect("close");
+        schema
+    })
+}
+
+/// A query's outcome must be a result, a `Corrupt` or `Storage` error, or
+/// `NotFound` when the damage renamed or removed a catalog name.
+fn query_ok(db: &mut Database, sql: &str) -> Result<(), String> {
+    let error = match db.execute(sql) {
+        Ok(_) => return Ok(()),
+        Err(e) => e,
+    };
+    match error.kind() {
+        ErrorKind::Corrupt | ErrorKind::Storage => Ok(()),
+        ErrorKind::NotFound => match db.schema() {
+            Ok(schema) if schema.as_slice() != undamaged_schema() => Ok(()),
+            Ok(_) => Err(format!(
+                "{sql}: NotFound with the undamaged schema: {error}"
+            )),
+            Err(e) => typed(Err(e), &[ErrorKind::Corrupt, ErrorKind::Storage], "schema"),
+        },
+        kind => Err(format!("{sql}: unexpected {kind:?} error: {error}")),
+    }
+}
+
 fn typed(result: Result<(), ExecError>, allowed: &[ErrorKind], what: &str) -> Result<(), String> {
     match result {
         Err(e) if !allowed.contains(&e.kind()) => {
@@ -130,9 +167,8 @@ fn exercise(
         &[ErrorKind::Corrupt, ErrorKind::Storage],
         "check",
     )?;
-    let query_kinds = [ErrorKind::Corrupt, ErrorKind::Storage, ErrorKind::NotFound];
     for sql in QUERIES {
-        typed(db.execute(sql).map(|_| ()), &query_kinds, sql)?;
+        query_ok(&mut db, sql)?;
     }
     typed(
         db.close(),
@@ -243,6 +279,7 @@ fn the_undamaged_images_open_and_pass_every_query() {
         }
         db.close().expect("close");
     }
+    assert_eq!(undamaged_schema().len(), 3, "people, orders and tags");
     assert!(
         images().closed.1.is_empty(),
         "the closed image has an empty log"

@@ -26,7 +26,10 @@ const FRAGMENTS: [&str; 6] = [
 ];
 
 /// Lexer vocabulary, including malformed tokens.
-const VOCABULARY: [&str; 92] = [
+const VOCABULARY: [&str; 95] = [
+    "\"\"",
+    "\"a\"\"b\"",
+    "\"\"\"",
     "AND",
     "AS",
     "ASC",

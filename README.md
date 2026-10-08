@@ -878,8 +878,13 @@ header field, swaps pages, truncates or appends, in the database file or
 the log. It then opens the result, runs `check()`, a fixed set of queries
 including `PRAGMA integrity_check`, and `close()`. Every 15th case repeats
 through real files. A failed open must be a `Corrupt` or `Storage` error,
-and with an empty log it must leave the database file unchanged. Queries
-may also fail with `NotFound` when the damage removed a catalog entry.
+and with an empty log it must leave the database file unchanged.
+`check()`, the queries and `close()` may only fail with `Corrupt` or
+`Storage`, with one exception. Pages carry no checksums, so damage can
+leave a well-formed catalog that names a table or column differently (a
+bit flip turns `person` into `persof`), which no check can tell from a
+real name. A query that then fails with `NotFound` passes only if the
+damaged file's `schema()` differs from the undamaged one.
 
 ## Benchmarks
 
